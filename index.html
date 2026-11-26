@@ -328,11 +328,16 @@
       });
     }
 
-    // Veilige Markdown-renderer voor notities (bullets, afbeeldingen, opmaak)
+    // Veilige Markdown-renderer voor notities (bullets, nummering, koppen, afbeeldingen, opmaak)
     function isSafeImageUrl(url) {
       if (!url || typeof url !== "string") return false;
       const trimmed = url.trim();
-      if (trimmed.startsWith("https://") || trimmed.startsWith("http://") || trimmed.startsWith("/")) {
+      if (
+        trimmed.startsWith("https://") ||
+        trimmed.startsWith("http://") ||
+        trimmed.startsWith("/") ||
+        trimmed.startsWith("data:image/")
+      ) {
         return true;
       }
       return false;
@@ -409,24 +414,34 @@
         }
       } catch (e) {}
 
-      // Fallback parser voor bullets, koppen en afbeeldingen
+      // Fallback parser voor bullets, nummering, koppen en afbeeldingen
       const lines = markdownStr.split(/\r?\n/);
       const parts = [];
-      let inList = false;
+      let listMode = null; // null | 'ul' | 'ol'
 
       for (const rawLine of lines) {
         const line = rawLine.trim();
         const bulletMatch = line.match(/^[-*+]\s+(.*)$/);
+        const orderedMatch = line.match(/^\d+\.\s+(.*)$/);
+
         if (bulletMatch) {
-          if (!inList) {
+          if (listMode !== "ul") {
+            if (listMode === "ol") parts.push("</ol>");
             parts.push('<ul class="my-1.5 list-disc pl-5 space-y-1">');
-            inList = true;
+            listMode = "ul";
           }
           parts.push(`<li>${renderInlineMarkdown(bulletMatch[1])}</li>`);
+        } else if (orderedMatch) {
+          if (listMode !== "ol") {
+            if (listMode === "ul") parts.push("</ul>");
+            parts.push('<ol class="my-1.5 list-decimal pl-5 space-y-1">');
+            listMode = "ol";
+          }
+          parts.push(`<li>${renderInlineMarkdown(orderedMatch[1])}</li>`);
         } else {
-          if (inList) {
-            parts.push("</ul>");
-            inList = false;
+          if (listMode) {
+            parts.push(listMode === "ul" ? "</ul>" : "</ol>");
+            listMode = null;
           }
           if (!line) {
             continue;
@@ -441,7 +456,7 @@
           }
         }
       }
-      if (inList) parts.push("</ul>");
+      if (listMode) parts.push(listMode === "ul" ? "</ul>" : "</ol>");
       return parts.join("");
     }
 
@@ -450,7 +465,7 @@
       if (!html) return null;
       return (
         <div
-          className={`text-xs leading-relaxed text-slate-600 dark:text-slate-300 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1.5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1.5 [&_ol]:space-y-1 [&_p]:my-1 [&_img]:my-2 [&_img]:max-h-56 [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-slate-700 [&_a]:underline [&_a]:text-indigo-600 dark:[&_a]:text-indigo-400 ${className}`}
+          className={`text-xs leading-relaxed text-slate-600 dark:text-slate-300 [&_h1]:mt-2 [&_h1]:text-sm [&_h1]:font-bold [&_h1]:text-slate-900 dark:[&_h1]:text-white [&_h2]:mt-2 [&_h2]:text-xs [&_h2]:font-bold [&_h2]:text-slate-900 dark:[&_h2]:text-white [&_h3]:mt-1.5 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-slate-800 dark:[&_h3]:text-slate-100 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1.5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1.5 [&_ol]:space-y-1 [&_p]:my-1 [&_img]:my-2 [&_img]:max-h-56 [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-slate-700 [&_a]:underline [&_a]:text-indigo-600 dark:[&_a]:text-indigo-400 ${className}`}
           dangerouslySetInnerHTML={{ __html: html }}
         />
       );
@@ -1082,50 +1097,115 @@
         setExpandedHistoryIds((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
       }
 
-      // Voeg een plaatje-Markdownregel toe op de cursorpositie of onderaan de notitie
-      function handleInsertImageMarkdown(imageUrl = "") {
-        const cleanUrl = String(imageUrl || "").trim();
-        const snippet = cleanUrl
-          ? `![Afbeelding](${cleanUrl})`
-          : `![Afbeelding](https://placehold.co/480x240)`;
+      // Vervang `- ` op een nieuwe regel direct door een net bullet-teken (`• `) en zet `1. ` bij Enter door
+      function handleNotesChange(e) {
+        const nextVal = e.target.value;
+        const ta = editNotesTextareaRef.current;
+        const cursorPos = ta ? ta.selectionStart : nextVal.length;
 
-        setEditingTask((prev) => {
-          if (!prev) return prev;
-          const currentNotes = prev.notes || "";
-          const ta = editNotesTextareaRef.current;
+        const beforeCursor = nextVal.slice(0, cursorPos);
+        const afterCursor = nextVal.slice(cursorPos);
+        const lineStartIdx = beforeCursor.lastIndexOf("\n") + 1;
+        const currentLine = beforeCursor.slice(lineStartIdx);
 
-          if (!ta || typeof ta.selectionStart !== "number") {
-            const separator = currentNotes.trim() ? "\n" : "";
-            return { ...prev, notes: `${currentNotes}${separator}${snippet}` };
-          }
-
-          const start = ta.selectionStart;
-          const end = ta.selectionEnd;
-          const before = currentNotes.slice(0, start);
-          const after = currentNotes.slice(end);
-          const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
-          const needsTrailingNewline = after.length > 0 && !after.startsWith("\n");
-          const inserted = `${needsLeadingNewline ? "\n" : ""}${snippet}${needsTrailingNewline ? "\n" : ""}`;
-          const nextNotes = `${before}${inserted}${after}`;
-
+        // Als de gebruiker op de huidige regel "- " typt, zet dit automatisch om naar "• "
+        if (currentLine === "- ") {
+          const updatedBefore = `${beforeCursor.slice(0, lineStartIdx)}• `;
+          const updatedVal = `${updatedBefore}${afterCursor}`;
+          setEditingTask((prev) => (prev ? { ...prev, notes: updatedVal } : prev));
           requestAnimationFrame(() => {
             if (editNotesTextareaRef.current) {
-              const nextPos = before.length + inserted.length;
+              const pos = updatedBefore.length;
               editNotesTextareaRef.current.focus();
-              editNotesTextareaRef.current.setSelectionRange(nextPos, nextPos);
+              editNotesTextareaRef.current.setSelectionRange(pos, pos);
             }
           });
+          return;
+        }
 
-          return { ...prev, notes: nextNotes };
-        });
+        setEditingTask((prev) => (prev ? { ...prev, notes: nextVal } : prev));
       }
 
-      // Ondersteun direct plakken van een afbeeldings-URL of afbeelding uit klembord in het notitieveld
+      // Laat Enter op een "• "-regel of genummerde regel ("1. ") automatisch de lijstregel voortzetten
+      function handleNotesKeyDown(e) {
+        if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
+        const ta = editNotesTextareaRef.current;
+        if (!ta) return;
+
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const currentNotes = editingTask?.notes || "";
+        const before = currentNotes.slice(0, start);
+        const after = currentNotes.slice(end);
+        const lineStartIdx = before.lastIndexOf("\n") + 1;
+        const currentLine = before.slice(lineStartIdx);
+
+        // Lege bullet-regel beëindigt de lijst
+        if (currentLine === "• ") {
+          e.preventDefault();
+          const cleanedBefore = `${before.slice(0, lineStartIdx)}\n`;
+          const nextNotes = `${cleanedBefore}${after}`;
+          setEditingTask((prev) => (prev ? { ...prev, notes: nextNotes } : prev));
+          requestAnimationFrame(() => {
+            if (editNotesTextareaRef.current) {
+              editNotesTextareaRef.current.focus();
+              editNotesTextareaRef.current.setSelectionRange(cleanedBefore.length, cleanedBefore.length);
+            }
+          });
+          return;
+        }
+
+        if (currentLine.startsWith("• ")) {
+          e.preventDefault();
+          const insertion = "\n• ";
+          const nextNotes = `${before}${insertion}${after}`;
+          setEditingTask((prev) => (prev ? { ...prev, notes: nextNotes } : prev));
+          requestAnimationFrame(() => {
+            if (editNotesTextareaRef.current) {
+              const pos = start + insertion.length;
+              editNotesTextareaRef.current.focus();
+              editNotesTextareaRef.current.setSelectionRange(pos, pos);
+            }
+          });
+          return;
+        }
+
+        const orderedMatch = currentLine.match(/^(\d+)\.\s+(.*)$/);
+        if (orderedMatch) {
+          e.preventDefault();
+          // Als de genummerde regel leeg is, stop nummering
+          if (!orderedMatch[2].trim()) {
+            const cleanedBefore = `${before.slice(0, lineStartIdx)}\n`;
+            const nextNotes = `${cleanedBefore}${after}`;
+            setEditingTask((prev) => (prev ? { ...prev, notes: nextNotes } : prev));
+            requestAnimationFrame(() => {
+              if (editNotesTextareaRef.current) {
+                editNotesTextareaRef.current.focus();
+                editNotesTextareaRef.current.setSelectionRange(cleanedBefore.length, cleanedBefore.length);
+              }
+            });
+            return;
+          }
+
+          const nextNum = Number(orderedMatch[1]) + 1;
+          const insertion = `\n${nextNum}. `;
+          const nextNotes = `${before}${insertion}${after}`;
+          setEditingTask((prev) => (prev ? { ...prev, notes: nextNotes } : prev));
+          requestAnimationFrame(() => {
+            if (editNotesTextareaRef.current) {
+              const pos = start + insertion.length;
+              editNotesTextareaRef.current.focus();
+              editNotesTextareaRef.current.setSelectionRange(pos, pos);
+            }
+          });
+        }
+      }
+
+      // Ondersteun direct plakken van een plaatje of afbeeldingslink uit klembord in het notitieveld
       function handleNotesPaste(e) {
         const clipboardData = e.clipboardData;
         if (!clipboardData) return;
 
-        // 1. Check of er een afbeelding in het klembord zit (bijv. screenshot)
         const items = Array.from(clipboardData.items || []);
         const imageItem = items.find((item) => item.type && item.type.startsWith("image/"));
         if (imageItem) {
@@ -1136,13 +1216,31 @@
             reader.onload = (ev) => {
               const dataUrl = ev.target?.result;
               if (typeof dataUrl === "string" && dataUrl.startsWith("data:image/")) {
-                // Gebruik veilige data:image/ URL rechtstreeks in Markdown
+                const ta = editNotesTextareaRef.current;
                 const snippet = `![Geplakte afbeelding](${dataUrl})`;
                 setEditingTask((prev) => {
                   if (!prev) return prev;
                   const currentNotes = prev.notes || "";
-                  const separator = currentNotes.trim() ? "\n" : "";
-                  return { ...prev, notes: `${currentNotes}${separator}${snippet}` };
+                  if (!ta || typeof ta.selectionStart !== "number") {
+                    const separator = currentNotes.trim() ? "\n" : "";
+                    return { ...prev, notes: `${currentNotes}${separator}${snippet}` };
+                  }
+                  const start = ta.selectionStart;
+                  const end = ta.selectionEnd;
+                  const before = currentNotes.slice(0, start);
+                  const after = currentNotes.slice(end);
+                  const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
+                  const needsTrailingNewline = after.length > 0 && !after.startsWith("\n");
+                  const inserted = `${needsLeadingNewline ? "\n" : ""}${snippet}${needsTrailingNewline ? "\n" : ""}`;
+                  const nextNotes = `${before}${inserted}${after}`;
+                  requestAnimationFrame(() => {
+                    if (editNotesTextareaRef.current) {
+                      const pos = before.length + inserted.length;
+                      editNotesTextareaRef.current.focus();
+                      editNotesTextareaRef.current.setSelectionRange(pos, pos);
+                    }
+                  });
+                  return { ...prev, notes: nextNotes };
                 });
               }
             };
@@ -1151,13 +1249,37 @@
           return;
         }
 
-        // 2. Check of geplakte tekst een losse afbeeldings-URL is en de gebruiker geen Markdown typt
         const pastedText = (clipboardData.getData("text/plain") || "").trim();
         const isDirectImageUrl =
           /^https?:\/\/\S+\.(png|jpe?g|gif|webp|avif|svg)(\?\S*)?$/i.test(pastedText);
         if (isDirectImageUrl) {
           e.preventDefault();
-          handleInsertImageMarkdown(pastedText);
+          const ta = editNotesTextareaRef.current;
+          const snippet = `![Afbeelding](${pastedText})`;
+          setEditingTask((prev) => {
+            if (!prev) return prev;
+            const currentNotes = prev.notes || "";
+            if (!ta || typeof ta.selectionStart !== "number") {
+              const separator = currentNotes.trim() ? "\n" : "";
+              return { ...prev, notes: `${currentNotes}${separator}${snippet}` };
+            }
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            const before = currentNotes.slice(0, start);
+            const after = currentNotes.slice(end);
+            const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
+            const needsTrailingNewline = after.length > 0 && !after.startsWith("\n");
+            const inserted = `${needsLeadingNewline ? "\n" : ""}${snippet}${needsTrailingNewline ? "\n" : ""}`;
+            const nextNotes = `${before}${inserted}${after}`;
+            requestAnimationFrame(() => {
+              if (editNotesTextareaRef.current) {
+                const pos = before.length + inserted.length;
+                editNotesTextareaRef.current.focus();
+                editNotesTextareaRef.current.setSelectionRange(pos, pos);
+              }
+            });
+            return { ...prev, notes: nextNotes };
+          });
         }
       }
 
@@ -2674,214 +2796,17 @@
                 <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3.5">
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                      Titel
+                      Notitie
                     </label>
-                    <input
-                      type="text"
-                      value={editingTask.title}
-                      onChange={(e) =>
-                        setEditingTask({ ...editingTask, title: e.target.value })
-                      }
-                      className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Project
-                      </label>
-                      <select
-                        value={editingTask.project || "werk"}
-                        onChange={(e) =>
-                          setEditingTask({ ...editingTask, project: e.target.value })
-                        }
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      >
-                        {PROJECTS.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Target date (leeg = backlog)
-                      </label>
-                      <input
-                        type="date"
-                        value={editingTask.targetDate || ""}
-                        onChange={(e) =>
-                          setEditingTask({
-                            ...editingTask,
-                            targetDate: e.target.value || null
-                          })
-                        }
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Status
-                      </label>
-                      <select
-                        value={editingTask.status || "todo"}
-                        onChange={(e) =>
-                          setEditingTask({ ...editingTask, status: e.target.value })
-                        }
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      >
-                        <option value="todo">To do</option>
-                        <option value="done">Done</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Herhaling
-                      </label>
-                      <select
-                        value={editingTask.recurrence?.type || "none"}
-                        onChange={(e) =>
-                          setEditingTask({
-                            ...editingTask,
-                            recurrence: {
-                              ...(editingTask.recurrence || {
-                                interval: 1,
-                                unit: "days",
-                                mode: "from_completion"
-                              }),
-                              type: e.target.value
-                            }
-                          })
-                        }
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      >
-                        <option value="none">Niet herhalend</option>
-                        <option value="daily">Dagelijks</option>
-                        <option value="weekdays">Werkdagen (ma–vr)</option>
-                        <option value="weekly">Wekelijks</option>
-                        <option value="biweekly">Elke 2 weken</option>
-                        <option value="monthly">Maandelijks</option>
-                        <option value="custom">Aangepast interval...</option>
-                      </select>
-                    </div>
-
-                    {editingTask.recurrence?.type && editingTask.recurrence.type !== "none" && (
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Nieuwe datum berekenen
-                        </label>
-                        <select
-                          value={editingTask.recurrence?.mode || "from_completion"}
-                          onChange={(e) =>
-                            setEditingTask({
-                              ...editingTask,
-                              recurrence: {
-                                ...editingTask.recurrence,
-                                mode: e.target.value
-                              }
-                            })
-                          }
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                        >
-                          <option value="from_completion">Vanaf afronddatum</option>
-                          <option value="from_due">Vaste cadans vanaf geplande datum</option>
-                        </select>
-                      </div>
-                    )}
-                  </div>
-
-                  {editingTask.recurrence?.type === "custom" && (
-                    <div className="flex gap-2">
-                      <div className="w-24">
-                        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Elke
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={editingTask.recurrence?.interval || 1}
-                          onChange={(e) =>
-                            setEditingTask({
-                              ...editingTask,
-                              recurrence: {
-                                ...editingTask.recurrence,
-                                interval: Math.max(1, Number(e.target.value) || 1)
-                              }
-                            })
-                          }
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Eenheid
-                        </label>
-                        <select
-                          value={editingTask.recurrence?.unit || "days"}
-                          onChange={(e) =>
-                            setEditingTask({
-                              ...editingTask,
-                              recurrence: {
-                                ...editingTask.recurrence,
-                                unit: e.target.value
-                              }
-                            })
-                          }
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                        >
-                          <option value="days">Dagen</option>
-                          <option value="weeks">Weken</option>
-                          <option value="months">Maanden</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Notitie
-                      </label>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const currentNotes = editingTask.notes || "";
-                            const prefix = currentNotes.length > 0 && !currentNotes.endsWith("\n") ? "\n" : "";
-                            setEditingTask({ ...editingTask, notes: `${currentNotes}${prefix}- ` });
-                            requestAnimationFrame(() => editNotesTextareaRef.current?.focus());
-                          }}
-                          className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                        >
-                          + Bullet
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleInsertImageMarkdown("")}
-                          className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition ${accent.softBtn}`}
-                        >
-                          + Plaatje invoegen
-                        </button>
-                      </div>
-                    </div>
                     <textarea
                       ref={editNotesTextareaRef}
-                      rows="5"
+                      rows="6"
                       value={editingTask.notes || ""}
+                      onKeyDown={handleNotesKeyDown}
                       onPaste={handleNotesPaste}
-                      onChange={(e) =>
-                        setEditingTask({ ...editingTask, notes: e.target.value })
-                      }
-                      placeholder={"Typ notities, gebruik `- ` voor bullets of klik op '+ Plaatje invoegen' / plak een afbeeldingslink..."}
-                      className={`max-h-60 min-h-[110px] w-full overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
+                      onChange={handleNotesChange}
+                      placeholder={"Typ je notitie (# kop, ## subkop, - voor bullet, 1. voor nummering en plak plaatjes direct in het veld)..."}
+                      className={`max-h-64 min-h-[120px] w-full overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
                     />
                     {editingTask.notes && editingTask.notes.trim() && (
                       <div className="mt-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/50">
