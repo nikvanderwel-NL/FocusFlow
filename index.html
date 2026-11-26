@@ -133,6 +133,7 @@
 
     const LOCAL_STORAGE_KEY = "focusflow_tasks_v3";
     const THEME_STORAGE_KEY = "focusflow_theme_v1";
+    const FEEDBACK_STORAGE_KEY = "focusflow_feedback_v1";
 
     const PROJECTS = [
       { id: "werk", label: "Werk", color: "blue" },
@@ -376,7 +377,6 @@
           .replace(/"/g, "&quot;");
 
       const formatInline = (str) => {
-        // Eerst afbeeldingen ![alt](url) verwerken zonder tekst te verminken
         const imgRegex = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
         let result = "";
         let lastIndex = 0;
@@ -506,7 +506,6 @@
         }
 
         if (tag === "p" || tag === "div") {
-          // Als een div/p een directe img bevat, voeg die als eigen regel toe
           const imgs = Array.from(node.querySelectorAll("img"));
           const nonImgText = Array.from(node.childNodes)
             .filter((c) => !(c.nodeType === Node.ELEMENT_NODE && c.tagName.toLowerCase() === "img"))
@@ -515,7 +514,6 @@
             .trim();
 
           if (nonImgText) {
-            // Automatische markdown-herkenning als de gebruiker bijv. "# Kop", "- punt" of "1. punt" typte
             const hMatch = nonImgText.match(/^(#{1,3})\s+(.*)$/);
             const ulMatch = nonImgText.match(/^[-*]\s+(.*)$/);
             const olMatch = nonImgText.match(/^(\d+)\.\s+(.*)$/);
@@ -579,7 +577,6 @@
         onChange(nextMd);
       };
 
-      // Zet directe markdown-patronen zoals "# ", "- " of "1. " om zodra je op spatie drukt
       const applyInlineMarkdownPattern = (el) => {
         const sel = window.getSelection();
         if (!sel || !sel.rangeCount) return;
@@ -777,6 +774,17 @@
         return INITIAL_TASKS;
       });
 
+      const [feedbackItems, setFeedbackItems] = useState(() => {
+        try {
+          const saved = localStorage.getItem(FEEDBACK_STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) return parsed;
+          }
+        } catch (e) {}
+        return [];
+      });
+
       const [undoStack, setUndoStack] = useState([]);
 
       const [darkMode, setDarkMode] = useState(() => {
@@ -787,9 +795,7 @@
         return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
       });
 
-      // Bovenliggend niveau: 'werk' | 'verburch' | 'persoonlijk' | 'all'
       const [activeProject, setActiveProject] = useState("werk");
-      // Weergaven onder het projectniveau: 'split' | 'day' | 'daily' | 'backlog' | 'overdue' | 'logbook'
       const [viewMode, setViewMode] = useState(() => (window.innerWidth < 768 ? "day" : "split"));
       const [dayLayout, setDayLayout] = useState("focus");
       const [selectedDate, setSelectedDate] = useState(() => toDateStr());
@@ -797,6 +803,14 @@
       const [backlogFilter, setBacklogFilter] = useState("all");
       const [searchQuery, setSearchQuery] = useState("");
       const [menuOpen, setMenuOpen] = useState(false);
+      // State voor de feedback-pop-up die overal via Ctrl+Shift+F / Cmd+Shift+F geopend kan worden
+      const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+      const [feedbackListModalOpen, setFeedbackListModalOpen] = useState(false);
+      const [feedbackDraft, setFeedbackDraft] = useState("");
+      const [listFeedbackDraft, setListFeedbackDraft] = useState("");
+      const [feedbackCopied, setFeedbackCopied] = useState(false);
+      const [feedbackText, setFeedbackText] = useState("");
+      const [feedbackEntries, setFeedbackEntries] = useState([]);
 
       const [newTitle, setNewTitle] = useState("");
       const [newProject, setNewProject] = useState("werk");
@@ -824,9 +838,40 @@
       const fileInputRef = useRef(null);
       const menuRef = useRef(null);
       const editFormRef = useRef(null);
+      const feedbackInputRef = useRef(null);
 
       const todayStr = toDateStr();
       const accent = useMemo(() => getAccentClasses(activeProject), [activeProject]);
+
+      // Globale sneltoets Ctrl+Shift+F / Cmd+Shift+F om overal de feedback-pop-up te openen
+      useEffect(() => {
+        function handleGlobalFeedbackShortcut(e) {
+          const isFeedbackCombo =
+            (e.ctrlKey || e.metaKey) &&
+            e.shiftKey &&
+            !e.altKey &&
+            String(e.key || "").toLowerCase() === "f";
+
+          if (!isFeedbackCombo) return;
+
+          e.preventDefault();
+          e.stopPropagation();
+          setMenuOpen(false);
+          setFeedbackModalOpen(true);
+        }
+
+        window.addEventListener("keydown", handleGlobalFeedbackShortcut, true);
+        return () => window.removeEventListener("keydown", handleGlobalFeedbackShortcut, true);
+      }, []);
+
+      // Focus het tekstveld zodra de feedback-pop-up opent
+      useEffect(() => {
+        if (!feedbackModalOpen) return;
+        const timer = setTimeout(() => {
+          feedbackInputRef.current?.focus();
+        }, 0);
+        return () => clearTimeout(timer);
+      }, [feedbackModalOpen]);
 
       useEffect(() => {
         if (activeProject !== "all") {
@@ -846,6 +891,12 @@
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
         } catch (e) {}
       }, [tasks]);
+
+      useEffect(() => {
+        try {
+          localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(feedbackItems));
+        } catch (e) {}
+      }, [feedbackItems]);
 
       useEffect(() => {
         if (!menuOpen) return;
@@ -921,6 +972,9 @@
                   }))
                 );
               }
+              if (Array.isArray(data.feedback)) {
+                setFeedbackItems(data.feedback);
+              }
               setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
             } else {
               setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
@@ -936,21 +990,21 @@
         return () => unsub();
       }, [fbReady, user]);
 
-      async function saveTasksToCloud(nextTasks) {
+      async function saveTasksToCloud(nextTasks, nextFeedback = null) {
         if (!fbReady || !window.FocusFlowFirebase || !user) return;
         const { db, doc, setDoc } = window.FocusFlowFirebase;
         try {
           setSyncStatus("Opslaan...");
           const userDocRef = doc(db, "focusflow_users", user.uid);
-          await setDoc(
-            userDocRef,
-            {
-              tasks: nextTasks,
-              updatedAt: new Date().toISOString(),
-              ownerEmail: user.email || null
-            },
-            { merge: true }
-          );
+          const payload = {
+            tasks: nextTasks,
+            updatedAt: new Date().toISOString(),
+            ownerEmail: user.email || null
+          };
+          if (Array.isArray(nextFeedback)) {
+            payload.feedback = nextFeedback;
+          }
+          await setDoc(userDocRef, payload, { merge: true });
           setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
           setSyncError("");
         } catch (err) {
@@ -958,6 +1012,99 @@
           setSyncStatus("Fout bij opslaan");
           setSyncError(err.message || "Kon niet opslaan in Firestore.");
         }
+      }
+
+      function updateFeedbackState(updater) {
+        setFeedbackItems((prev) => {
+          const next = typeof updater === "function" ? updater(prev) : updater;
+          saveTasksToCloud(tasks, next);
+          return next;
+        });
+      }
+
+      function createFeedbackEntry(rawText) {
+        const trimmed = (rawText || "").trim();
+        if (!trimmed) return null;
+        return {
+          id: `fb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          text: trimmed,
+          createdAt: new Date().toISOString(),
+          processed: false,
+          processedAt: null,
+          contextProject: activeProject,
+          contextView: viewMode
+        };
+      }
+
+      function handleSubmitFeedbackModal(e) {
+        e.preventDefault();
+        const entry = createFeedbackEntry(feedbackDraft);
+        if (!entry) return;
+        updateFeedbackState((prev) => [entry, ...prev]);
+        setFeedbackDraft("");
+        setFeedbackModalOpen(false);
+        showToast("Feedback opgeslagen in je feedbacklijst");
+      }
+
+      function handleAddFeedbackInList(e) {
+        e.preventDefault();
+        const entry = createFeedbackEntry(listFeedbackDraft);
+        if (!entry) return;
+        updateFeedbackState((prev) => [entry, ...prev]);
+        setListFeedbackDraft("");
+        showToast("Feedback toegevoegd");
+      }
+
+      function handleToggleFeedbackProcessed(id) {
+        const nowIso = new Date().toISOString();
+        updateFeedbackState((prev) =>
+          prev.map((item) => {
+            if (item.id !== id) return item;
+            const nextProcessed = !Boolean(item.processed);
+            return {
+              ...item,
+              processed: nextProcessed,
+              processedAt: nextProcessed ? nowIso : null
+            };
+          })
+        );
+      }
+
+      function handleDeleteFeedback(id) {
+        updateFeedbackState((prev) => prev.filter((item) => item.id !== id));
+      }
+
+      function handleCopyFeedbackForGemini() {
+        const openItems = feedbackItems.filter((f) => !f.processed);
+        const targetList = openItems.length > 0 ? openItems : feedbackItems;
+        if (targetList.length === 0) return;
+
+        const lines = [
+          "Hier is mijn feedbacklijst uit FocusFlow om te verwerken:",
+          ...targetList.map((item, idx) => {
+            const statusText = item.processed
+              ? `verwerkt op ${formatDateTimeNL(item.processedAt)}`
+              : "nog niet verwerkt";
+            return `${idx + 1}. ${item.text} (toegevoegd: ${formatDateTimeNL(item.createdAt)}, status: ${statusText})`;
+          })
+        ];
+        const output = lines.join("\n");
+
+        const temp = document.createElement("textarea");
+        temp.value = output;
+        temp.setAttribute("readonly", "");
+        temp.style.position = "absolute";
+        temp.style.left = "-9999px";
+        document.body.appendChild(temp);
+        temp.select();
+        try {
+          document.execCommand("copy");
+          setFeedbackCopied(true);
+          setTimeout(() => setFeedbackCopied(false), 2500);
+        } catch (err) {
+          console.error("Kopiëren mislukt:", err);
+        }
+        document.body.removeChild(temp);
       }
 
       function commitTasksChange(updater, actionLabel = "Wijziging") {
@@ -1098,7 +1245,6 @@
                 }
               ];
 
-              // Afgeronde taken krijgen automatisch daily: true, behalve terugkerende taken
               const nextDaily = hasRecurrence ? Boolean(t.daily) : true;
 
               if (hasRecurrence) {
@@ -1267,6 +1413,26 @@
         showToast("Taak bijgewerkt", true);
       }
 
+      // Sla feedback op en sluit de pop-up
+      function handleSubmitFeedback(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        const trimmed = feedbackText.trim();
+        if (!trimmed) return;
+
+        const entry = {
+          id: `fb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          text: trimmed,
+          createdAt: new Date().toISOString(),
+          processed: false,
+          processedAt: null
+        };
+
+        setFeedbackEntries((prev) => [entry, ...prev]);
+        setFeedbackText("");
+        setFeedbackModalOpen(false);
+        showToast("Feedback opgeslagen");
+      }
+
       function toggleHistoryExpand(taskId) {
         setExpandedHistoryIds((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
       }
@@ -1432,6 +1598,11 @@
         }
         return Array.from(grouped.entries());
       }, [filteredTasks, todayStr]);
+
+      const openFeedbackCount = useMemo(
+        () => feedbackItems.filter((f) => !f.processed).length,
+        [feedbackItems]
+      );
 
       const accountLabel =
         user && !user.isAnonymous
@@ -1858,7 +2029,7 @@
                 </div>
               </div>
 
-              {/* Tweede niveau: Weergaven (Beide, Per Dag, Daily, Backlog, Overdue, Logboek) + Acties */}
+              {/* Tweede niveau: Weergaven + Acties */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <nav className="flex flex-wrap items-center rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800">
                   {[
@@ -1919,6 +2090,11 @@
                       className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       <span>Menu</span>
+                      {openFeedbackCount > 0 && (
+                        <span className="rounded-full bg-amber-100 px-1.5 py-0.2 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                          {openFeedbackCount}
+                        </span>
+                      )}
                       <span className="text-[10px]">{menuOpen ? "▲" : "▼"}</span>
                     </button>
 
@@ -1939,6 +2115,33 @@
                         </div>
 
                         <div className="py-1 space-y-0.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOpen(false);
+                              setFeedbackModalOpen(true);
+                            }}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <span>Feedback geven</span>
+                            <span className="text-slate-400">✎</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOpen(false);
+                              setFeedbackCopied(false);
+                              setFeedbackListModalOpen(true);
+                            }}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <span>Alle feedback</span>
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] dark:bg-slate-800">
+                              {openFeedbackCount} open / {feedbackItems.length}
+                            </span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => {
@@ -2632,6 +2835,188 @@
             )}
           </main>
 
+          {/* Pop-up: Nieuwe feedback invoeren */}
+          {feedbackModalOpen && (
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+              <form
+                onSubmit={handleSubmitFeedbackModal}
+                className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold">Feedback geven</h3>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackModalOpen(false)}
+                    className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Noteer een verbeterpunt of wens. Je kunt de lijst later eenvoudig oproepen en in Gemini plakken om te laten verwerken.
+                </p>
+
+                <div className="mt-4">
+                  <textarea
+                    rows="5"
+                    autoFocus
+                    value={feedbackDraft}
+                    onChange={(e) => setFeedbackDraft(e.target.value)}
+                    placeholder="Beschrijf je feedback over FocusFlow..."
+                    className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
+                    required
+                  />
+                </div>
+
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackModalOpen(false)}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="submit"
+                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
+                  >
+                    Feedback opslaan
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Pop-up: Alle feedback inzien, toevoegen, status bijhouden en verwijderen */}
+          {feedbackListModalOpen && (
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+              <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+                  <div>
+                    <h3 className="text-base font-bold">Alle feedback ({feedbackItems.length})</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {openFeedbackCount} nog niet verwerkt • {feedbackItems.length - openFeedbackCount} verwerkt
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {feedbackItems.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleCopyFeedbackForGemini}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                      >
+                        {feedbackCopied ? "✓ Gekopieerd voor Gemini" : "Kopieer voor Gemini"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackListModalOpen(false)}
+                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                <form
+                  onSubmit={handleAddFeedbackInList}
+                  className="flex shrink-0 gap-2 border-b border-slate-100 bg-slate-50/70 px-6 py-3.5 dark:border-slate-800 dark:bg-slate-950/40"
+                >
+                  <input
+                    type="text"
+                    value={listFeedbackDraft}
+                    onChange={(e) => setListFeedbackDraft(e.target.value)}
+                    placeholder="Nieuwe feedback toevoegen..."
+                    className={`flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-900`}
+                  />
+                  <button
+                    type="submit"
+                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
+                  >
+                    Toevoegen
+                  </button>
+                </form>
+
+                <div className="flex-1 space-y-2.5 overflow-y-auto px-6 py-4">
+                  {feedbackItems.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
+                      Nog geen feedback opgeslagen.
+                    </p>
+                  ) : (
+                    feedbackItems.map((item) => {
+                      const isProcessed = Boolean(item.processed);
+                      return (
+                        <div
+                          key={item.id}
+                          className={`rounded-xl border p-3.5 transition ${
+                            isProcessed
+                              ? "border-emerald-200/80 bg-emerald-50/40 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+                              : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                                    isProcessed
+                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                      : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                  }`}
+                                >
+                                  {isProcessed ? "Verwerkt" : "Niet verwerkt"}
+                                </span>
+                                <span className="text-[11px] text-slate-400">
+                                  Toegevoegd: {formatDateTimeNL(item.createdAt)}
+                                </span>
+                                {isProcessed && item.processedAt && (
+                                  <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                                    • Verwerkt op: {formatDateTimeNL(item.processedAt)}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-2 whitespace-pre-line text-sm text-slate-800 dark:text-slate-100">
+                                {item.text}
+                              </p>
+                            </div>
+
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleFeedbackProcessed(item.id)}
+                                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                              >
+                                {isProcessed ? "Markeer open" : "Markeer verwerkt"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteFeedback(item.id)}
+                                className="rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
+                              >
+                                Verwijderen
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="flex shrink-0 justify-end border-t border-slate-100 px-6 py-3.5 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackListModalOpen(false)}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    Sluiten
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {editingTask && (
             <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
               <form
@@ -2890,6 +3275,76 @@
                     className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
                   >
                     Opslaan
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Feedback pop-up (ook bereikbaar via Ctrl+Shift+F / Cmd+Shift+F) */}
+          {feedbackModalOpen && (
+            <div
+              onClick={() => setFeedbackModalOpen(false)}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+            >
+              <form
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={handleSubmitFeedback}
+                className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-bold">Feedback geven</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Sneltoets: Ctrl+Shift+F (of Cmd+Shift+F)
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackModalOpen(false)}
+                    className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="mt-4">
+                  <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Jouw feedback of idee voor FocusFlow
+                  </label>
+                  <textarea
+                    ref={feedbackInputRef}
+                    rows="5"
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setFeedbackModalOpen(false);
+                      } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                        e.preventDefault();
+                        handleSubmitFeedback(e);
+                      }
+                    }}
+                    placeholder="Beschrijf wat je wilt verbeteren of toevoegen..."
+                    className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
+                    required
+                  />
+                </div>
+
+                <div className="mt-5 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackModalOpen(false)}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="submit"
+                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
+                  >
+                    Feedback opslaan
                   </button>
                 </div>
               </form>
