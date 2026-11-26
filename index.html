@@ -986,6 +986,11 @@
         return allDailyTasks;
       }, [allDailyTasks, dailyDoneTasks, dailyOpenTasks, dailyFilter]);
 
+      // Taken gepland voor vandaag (binnen actieve projectfilter / zoekopdracht)
+      const todayPlannedTasks = useMemo(() => {
+        return filteredTasks.filter((t) => t.targetDate === todayStr);
+      }, [filteredTasks, todayStr]);
+
       const overdueTasks = useMemo(() => {
         return filteredTasks.filter(
           (t) => t.status === "todo" && t.targetDate && t.targetDate < todayStr
@@ -1683,141 +1688,256 @@
 
             {/* DAILY-WEERGAVE */}
             {viewMode === "daily" && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
-                  <div>
-                    <h2 className="text-lg font-bold">Daily — Overzicht &amp; Notities</h2>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                      Afgeronde taken (behalve terugkerende taken) krijgen automatisch{" "}
-                      <code className="font-mono">daily</code>; je kunt dit ook handmatig aan- of uitzetten per taak.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs dark:bg-slate-800">
-                      {[
-                        { id: "all", label: `Alle (${allDailyTasks.length})` },
-                        { id: "done", label: `Afgerond (${dailyDoneTasks.length})` },
-                        { id: "todo", label: `Nog open (${dailyOpenTasks.length})` }
-                      ].map((f) => (
-                        <button
-                          key={f.id}
-                          type="button"
-                          onClick={() => setDailyFilter(f.id)}
-                          className={`rounded-md px-2.5 py-1 transition ${
-                            dailyFilter === f.id
-                              ? `bg-white font-semibold shadow-sm dark:bg-slate-900 ${accent.activeTabText}`
-                              : "text-slate-600 dark:text-slate-300"
-                          }`}
-                        >
-                          {f.label}
-                        </button>
-                      ))}
+              <div className="space-y-6">
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+                    <div>
+                      <h2 className="text-lg font-bold">Daily — Overzicht &amp; Notities</h2>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        Afgeronde taken (behalve terugkerende taken) krijgen automatisch{" "}
+                        <code className="font-mono">daily</code>; je kunt dit ook handmatig aan- of uitzetten per taak.
+                      </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleCopyDailySummary}
-                      disabled={visibleDailyTasks.length === 0}
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-40 ${accent.undoBtn}`}
-                    >
-                      Kopieer update
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs dark:bg-slate-800">
+                        {[
+                          { id: "all", label: `Alle (${allDailyTasks.length})` },
+                          { id: "done", label: `Afgerond (${dailyDoneTasks.length})` },
+                          { id: "todo", label: `Nog open (${dailyOpenTasks.length})` }
+                        ].map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setDailyFilter(f.id)}
+                            className={`rounded-md px-2.5 py-1 transition ${
+                              dailyFilter === f.id
+                                ? `bg-white font-semibold shadow-sm dark:bg-slate-900 ${accent.activeTabText}`
+                                : "text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
 
-                    <button
-                      type="button"
-                      onClick={handleClearAllDailyFlags}
-                      disabled={allDailyTasks.length === 0}
-                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                    >
-                      Wis Daily-vinkjes
-                    </button>
-                  </div>
-                </div>
+                      <button
+                        type="button"
+                        onClick={handleCopyDailySummary}
+                        disabled={visibleDailyTasks.length === 0}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-40 ${accent.undoBtn}`}
+                      >
+                        Kopieer update
+                      </button>
 
-                {visibleDailyTasks.length === 0 ? (
-                  <div className="mt-6 rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 dark:border-slate-800">
-                    Geen taken met <code className="font-mono">daily</code> voor dit filter. Rond een taak af of klik op{" "}
-                    <span className="font-semibold">☆ Daily</span> op een taak om hem toe te voegen aan je dagelijkse update.
+                      <button
+                        type="button"
+                        onClick={handleClearAllDailyFlags}
+                        disabled={allDailyTasks.length === 0}
+                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        Wis Daily-vinkjes
+                      </button>
+                    </div>
                   </div>
-                ) : (
-                  <div className="mt-5 space-y-3">
-                    {visibleDailyTasks.map((task) => {
-                      const proj = getProjectMeta(task.project);
-                      const isDone = task.status === "done";
-                      const hasRecurrence = isRecurringTask(task);
-                      return (
-                        <div
-                          key={task.id}
-                          className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/50"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+
+                  {visibleDailyTasks.length === 0 ? (
+                    <div className="mt-6 rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 dark:border-slate-800">
+                      Geen taken met <code className="font-mono">daily</code> voor dit filter. Rond een taak af of klik op{" "}
+                      <span className="font-semibold">☆ Daily</span> op een taak om hem toe te voegen aan je dagelijkse update.
+                    </div>
+                  ) : (
+                    <div className="mt-5 space-y-3">
+                      {visibleDailyTasks.map((task) => {
+                        const proj = getProjectMeta(task.project);
+                        const isDone = task.status === "done";
+                        const hasRecurrence = isRecurringTask(task);
+                        return (
+                          <div
+                            key={task.id}
+                            className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/50"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleComplete(task.id)}
+                                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs ${
+                                    isDone && !hasRecurrence
+                                      ? "border-emerald-500 bg-emerald-500 text-white"
+                                      : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
+                                  }`}
+                                >
+                                  {isDone && !hasRecurrence ? "✓" : ""}
+                                </button>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                                      {task.title}
+                                    </span>
+                                    <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium ${proj.accentBadge}`}>
+                                      <span className={`h-1.5 w-1.5 rounded-full ${proj.dotClass}`} />
+                                      {proj.label}
+                                    </span>
+                                    <span
+                                      className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
+                                        isDone && !hasRecurrence
+                                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300"
+                                          : "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300"
+                                      }`}
+                                    >
+                                      {isDone && !hasRecurrence ? "Afgerond" : "Nog open"}
+                                    </span>
+                                  </div>
+                                  {task.notes && (
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                      {task.notes}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
                               <button
                                 type="button"
-                                onClick={() => handleToggleComplete(task.id)}
-                                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs ${
-                                  isDone && !hasRecurrence
-                                    ? "border-emerald-500 bg-emerald-500 text-white"
-                                    : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
-                                }`}
+                                onClick={() => handleToggleDaily(task.id)}
+                                className="rounded-lg px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-200/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                               >
-                                {isDone && !hasRecurrence ? "✓" : ""}
+                                Uit Daily halen
                               </button>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                                    {task.title}
-                                  </span>
-                                  <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium ${proj.accentBadge}`}>
-                                    <span className={`h-1.5 w-1.5 rounded-full ${proj.dotClass}`} />
-                                    {proj.label}
-                                  </span>
-                                  <span
-                                    className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
-                                      isDone && !hasRecurrence
-                                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300"
-                                        : "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300"
-                                    }`}
-                                  >
-                                    {isDone && !hasRecurrence ? "Afgerond" : "Nog open"}
-                                  </span>
-                                </div>
-                                {task.notes && (
-                                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                    {task.notes}
-                                  </p>
-                                )}
-                              </div>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() => handleToggleDaily(task.id)}
-                              className="rounded-lg px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-200/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                            >
-                              Uit Daily halen
-                            </button>
+                            <div className="mt-3 pl-7">
+                              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                Daily-notitie / update
+                              </label>
+                              <input
+                                type="text"
+                                value={task.dailyNote || ""}
+                                onChange={(e) => handleUpdateDailyNote(task.id, e.target.value)}
+                                placeholder="Wat wil je hierover vertellen in de daily of wat is de volgende stap?"
+                                className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-900 ${accent.focusRing}`}
+                              />
+                            </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
 
-                          <div className="mt-3 pl-7">
-                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                              Daily-notitie / update
-                            </label>
-                            <input
-                              type="text"
-                              value={task.dailyNote || ""}
-                              onChange={(e) => handleUpdateDailyNote(task.id, e.target.value)}
-                              placeholder="Wat wil je hierover vertellen in de daily of wat is de volgende stap?"
-                              className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-900 ${accent.focusRing}`}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                {/* OVERZICHT TAKEN GEPLAND VOOR VANDAAG IN DAILY */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+                    <div>
+                      <h3 className="text-base font-bold">
+                        Gepland voor vandaag ({todayPlannedTasks.length})
+                      </h3>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        Alle taken met streefdatum vandaag ({todayStr}) — vink af, zet op Daily of schrijf een daily-notitie.
+                      </p>
+                    </div>
                   </div>
-                )}
-              </section>
+
+                  {todayPlannedTasks.length === 0 ? (
+                    <div className="mt-5 rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
+                      Er staan geen taken gepland voor vandaag ({todayStr}).
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      {todayPlannedTasks.map((task) => {
+                        const proj = getProjectMeta(task.project);
+                        const isDone = task.status === "done";
+                        const hasRecurrence = isRecurringTask(task);
+                        const isDaily = Boolean(task.daily);
+                        return (
+                          <div
+                            key={`today-daily-${task.id}`}
+                            className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/50"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleComplete(task.id)}
+                                  title={isDone && !hasRecurrence ? "Zet terug op To do" : "Markeer als gedaan"}
+                                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs ${
+                                    isDone && !hasRecurrence
+                                      ? "border-emerald-500 bg-emerald-500 text-white"
+                                      : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
+                                  }`}
+                                >
+                                  {isDone && !hasRecurrence ? "✓" : ""}
+                                </button>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={`text-sm font-semibold ${
+                                        isDone && !hasRecurrence
+                                          ? "line-through text-slate-400 dark:text-slate-500"
+                                          : "text-slate-900 dark:text-white"
+                                      }`}
+                                    >
+                                      {task.title}
+                                    </span>
+                                    <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium ${proj.accentBadge}`}>
+                                      <span className={`h-1.5 w-1.5 rounded-full ${proj.dotClass}`} />
+                                      {proj.label}
+                                    </span>
+                                    <span
+                                      className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
+                                        isDone && !hasRecurrence
+                                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300"
+                                          : "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300"
+                                      }`}
+                                    >
+                                      {isDone && !hasRecurrence ? "Afgerond" : "Nog open"}
+                                    </span>
+                                    {hasRecurrence && (
+                                      <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${proj.theme.recurrenceBadge}`}>
+                                        ↻ {formatRecurrenceLabel(task.recurrence)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {task.notes && (
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                      {task.notes}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleToggleDaily(task.id)}
+                                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                                  isDaily
+                                    ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/70 dark:text-amber-300"
+                                    : "text-slate-500 hover:bg-slate-200/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                }`}
+                              >
+                                {isDaily ? "★ In Daily" : "☆ Op Daily zetten"}
+                              </button>
+                            </div>
+
+                            <div className="mt-3 pl-7">
+                              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                Daily-notitie / update
+                              </label>
+                              <input
+                                type="text"
+                                value={task.dailyNote || ""}
+                                onChange={(e) => handleUpdateDailyNote(task.id, e.target.value)}
+                                placeholder="Wat wil je hierover vertellen in de daily of wat is de volgende stap?"
+                                className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-900 ${accent.focusRing}`}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              </div>
             )}
 
             {/* OVERDUE WEERGAVE */}
