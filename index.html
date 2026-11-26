@@ -27,6 +27,7 @@
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased selection:bg-indigo-500/20 selection:text-indigo-500">
   <div id="root"></div>
 
+  <!-- Firebase v10 SDK initialisatie met jouw persoonlijke configuratie -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
     import {
@@ -73,12 +74,112 @@
     window.dispatchEvent(new Event("focusflow-firebase-ready"));
   </script>
 
+  <!-- FocusFlow applicatie in React + Babel -->
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef } = React;
 
     const LOCAL_STORAGE_KEY = "focusflow_tasks_v2";
     const THEME_STORAGE_KEY = "focusflow_theme_v1";
 
+    // Projectconfiguratie: Werk (blauw), Verburch (oranje), Persoonlijk (groen)
+    const PROJECTS = [
+      {
+        id: "werk",
+        label: "Werk",
+        accentText: "text-blue-700 dark:text-blue-300",
+        accentSolid: "bg-blue-600 hover:bg-blue-700 text-white",
+        accentBadge: "bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300",
+        dotClass: "bg-blue-500",
+        theme: {
+          recurrenceBadge: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300",
+          activeTabText: "text-blue-600 dark:text-blue-400",
+          checkboxHover: "hover:border-blue-500 dark:hover:border-blue-400",
+          primaryBtn: "bg-blue-600 hover:bg-blue-700 text-white",
+          softBtn: "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60",
+          focusRing: "focus:border-blue-500",
+          weekCountBadge: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+          todayDot: "bg-blue-500",
+          dropBorder: "border-blue-500 bg-blue-50/50 dark:bg-blue-950/30",
+          dragOverDay: "border-blue-400 bg-blue-50 dark:bg-blue-950/50",
+          logBadge: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+          undoBtn: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60"
+        }
+      },
+      {
+        id: "verburch",
+        label: "Verburch",
+        accentText: "text-orange-700 dark:text-orange-300",
+        accentSolid: "bg-orange-600 hover:bg-orange-700 text-white",
+        accentBadge: "bg-orange-100 text-orange-800 dark:bg-orange-950/80 dark:text-orange-300",
+        dotClass: "bg-orange-500",
+        theme: {
+          recurrenceBadge: "bg-orange-50 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300",
+          activeTabText: "text-orange-600 dark:text-orange-400",
+          checkboxHover: "hover:border-orange-500 dark:hover:border-orange-400",
+          primaryBtn: "bg-orange-600 hover:bg-orange-700 text-white",
+          softBtn: "bg-orange-50 text-orange-700 hover:bg-orange-100 dark:bg-orange-950/60 dark:text-orange-300 dark:hover:bg-orange-900/60",
+          focusRing: "focus:border-orange-500",
+          weekCountBadge: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+          todayDot: "bg-orange-500",
+          dropBorder: "border-orange-500 bg-orange-50/50 dark:bg-orange-950/30",
+          dragOverDay: "border-orange-400 bg-orange-50 dark:bg-orange-950/50",
+          logBadge: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+          undoBtn: "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-300 dark:hover:bg-orange-900/60"
+        }
+      },
+      {
+        id: "persoonlijk",
+        label: "Persoonlijk",
+        accentText: "text-emerald-700 dark:text-emerald-300",
+        accentSolid: "bg-emerald-600 hover:bg-emerald-700 text-white",
+        accentBadge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300",
+        dotClass: "bg-emerald-500",
+        theme: {
+          recurrenceBadge: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+          activeTabText: "text-emerald-600 dark:text-emerald-400",
+          checkboxHover: "hover:border-emerald-500 dark:hover:border-emerald-400",
+          primaryBtn: "bg-emerald-600 hover:bg-emerald-700 text-white",
+          softBtn: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60",
+          focusRing: "focus:border-emerald-500",
+          weekCountBadge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+          todayDot: "bg-emerald-500",
+          dropBorder: "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30",
+          dragOverDay: "border-emerald-400 bg-emerald-50 dark:bg-emerald-950/50",
+          logBadge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+          undoBtn: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+        }
+      }
+    ];
+
+    // Paars accent behouden voor de 'Alle'-weergave
+    const ALL_VIEW_THEME = {
+      recurrenceBadge: "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300",
+      activeTabText: "text-purple-600 dark:text-purple-400",
+      checkboxHover: "hover:border-purple-500 dark:hover:border-purple-400",
+      primaryBtn: "bg-purple-600 hover:bg-purple-700 text-white",
+      softBtn: "bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/60 dark:text-purple-300 dark:hover:bg-purple-900/60",
+      focusRing: "focus:border-purple-500",
+      weekCountBadge: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
+      todayDot: "bg-purple-500",
+      dropBorder: "border-purple-500 bg-purple-50/50 dark:bg-purple-950/30",
+      dragOverDay: "border-purple-400 bg-purple-50 dark:bg-purple-950/50",
+      logBadge: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
+      undoBtn: "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300 dark:hover:bg-purple-900/60"
+    };
+
+    function getProjectMeta(projectId) {
+      return PROJECTS.find((p) => p.id === projectId) || PROJECTS[0];
+    }
+
+    function getActiveAccentTheme(activeProject, taskProjectId = null) {
+      if (activeProject === "all") {
+        if (taskProjectId) return getProjectMeta(taskProjectId).theme;
+        return ALL_VIEW_THEME;
+      }
+      return getProjectMeta(activeProject).theme;
+    }
+
+    // Datum hulpfuncties
     function toDateStr(dateObj = new Date()) {
       const y = dateObj.getFullYear();
       const m = String(dateObj.getMonth() + 1).padStart(2, "0");
@@ -107,6 +208,10 @@
       const maxDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
       base.setDate(Math.min(targetDay, maxDay));
       return toDateStr(base);
+    }
+
+    function isRecurringTask(task) {
+      return Boolean(task && task.recurrence && task.recurrence.type && task.recurrence.type !== "none");
     }
 
     function computeNextDueDate(task, completedDateStr) {
@@ -222,23 +327,47 @@
       });
     }
 
+    function normalizeTaskShape(t) {
+      const validProjectIds = PROJECTS.map((p) => p.id);
+      return {
+        ...t,
+        project: validProjectIds.includes(t.project) ? t.project : "werk",
+        daily: Boolean(t.daily),
+        dailyNote: typeof t.dailyNote === "string" ? t.dailyNote : "",
+        notes: typeof t.notes === "string" ? t.notes : "",
+        recurrence: t.recurrence || {
+          type: "none",
+          interval: 1,
+          unit: "days",
+          mode: "from_completion"
+        },
+        completions: Array.isArray(t.completions) ? t.completions : []
+      };
+    }
+
     const INITIAL_TASKS = [
       {
         id: "t-1",
         title: "Weekprioriteiten bepalen in FocusFlow",
+        project: "werk",
         status: "todo",
         targetDate: toDateStr(),
         notes: "Kies maximaal 3 belangrijke taken voor vandaag.",
+        daily: true,
+        dailyNote: "Focus ligt op de afronding van de planning.",
         recurrence: { type: "weekly", interval: 1, unit: "weeks", mode: "from_completion" },
         completions: [],
         createdAt: new Date().toISOString()
       },
       {
         id: "t-2",
-        title: "Inbox opschonen en losse notities verwerken",
+        title: "Training & wedstrijdschema Verburch nakijken",
+        project: "verburch",
         status: "todo",
         targetDate: toDateStr(),
         notes: "",
+        daily: false,
+        dailyNote: "",
         recurrence: { type: "weekdays", interval: 1, unit: "days", mode: "from_completion" },
         completions: [],
         createdAt: new Date().toISOString()
@@ -246,9 +375,12 @@
       {
         id: "t-3",
         title: "Ideeën voor nieuwe projecten uitwerken",
+        project: "persoonlijk",
         status: "todo",
         targetDate: null,
         notes: "Staat in de backlog tot er tijd vrij is.",
+        daily: false,
+        dailyNote: "",
         recurrence: { type: "none", interval: 1, unit: "days", mode: "from_completion" },
         completions: [],
         createdAt: new Date().toISOString()
@@ -261,11 +393,13 @@
           const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
           if (saved) {
             const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) return parsed;
+            if (Array.isArray(parsed)) return parsed.map(normalizeTaskShape);
           }
         } catch (e) {}
-        return INITIAL_TASKS;
+        return INITIAL_TASKS.map(normalizeTaskShape);
       });
+
+      const [undoStack, setUndoStack] = useState([]);
 
       const [darkMode, setDarkMode] = useState(() => {
         try {
@@ -276,35 +410,52 @@
       });
 
       const [viewMode, setViewMode] = useState(() => (window.innerWidth < 768 ? "day" : "split"));
+      const [activeProject, setActiveProject] = useState("werk"); // "werk" | "verburch" | "persoonlijk" | "all"
       const [dayLayout, setDayLayout] = useState("focus");
       const [selectedDate, setSelectedDate] = useState(() => toDateStr());
       const [showDoneInDay, setShowDoneInDay] = useState(true);
       const [backlogFilter, setBacklogFilter] = useState("all");
+      const [dailyFilter, setDailyFilter] = useState("all"); // "all" | "done" | "todo"
       const [searchQuery, setSearchQuery] = useState("");
+      const [menuOpen, setMenuOpen] = useState(false);
 
+      // Nieuwe taak invoer
       const [newTitle, setNewTitle] = useState("");
+      const [newProject, setNewProject] = useState("werk");
       const [newDate, setNewDate] = useState(() => toDateStr());
       const [newNotes, setNewNotes] = useState("");
+      const [newDaily, setNewDaily] = useState(false);
+      const [newDailyNote, setNewDailyNote] = useState("");
       const [newRecType, setNewRecType] = useState("none");
       const [newRecInterval, setNewRecInterval] = useState(1);
       const [newRecUnit, setNewRecUnit] = useState("days");
       const [newRecMode, setNewRecMode] = useState("from_completion");
       const [showNewOptions, setShowNewOptions] = useState(false);
 
+      // Bewerken van taak
       const [editingTask, setEditingTask] = useState(null);
       const [expandedHistoryIds, setExpandedHistoryIds] = useState({});
       const [draggedTaskId, setDraggedTaskId] = useState(null);
       const [dragOverTarget, setDragOverTarget] = useState(null);
       const [toast, setToast] = useState(null);
 
+      // Firebase auth & sync state
       const [fbReady, setFbReady] = useState(Boolean(window.FocusFlowFirebase));
       const [user, setUser] = useState(null);
       const [syncStatus, setSyncStatus] = useState("Lokaal");
       const [syncError, setSyncError] = useState("");
       const skipNextCloudWriteRef = useRef(false);
       const fileInputRef = useRef(null);
+      const menuRef = useRef(null);
 
       const todayStr = toDateStr();
+      const accent = useMemo(() => getActiveAccentTheme(activeProject), [activeProject]);
+
+      useEffect(() => {
+        if (activeProject !== "all") {
+          setNewProject(activeProject);
+        }
+      }, [activeProject]);
 
       useEffect(() => {
         document.documentElement.classList.toggle("dark", darkMode);
@@ -318,6 +469,24 @@
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
         } catch (e) {}
       }, [tasks]);
+
+      useEffect(() => {
+        if (!menuOpen) return;
+        function onDocClick(e) {
+          if (menuRef.current && !menuRef.current.contains(e.target)) {
+            setMenuOpen(false);
+          }
+        }
+        function onKeyDown(e) {
+          if (e.key === "Escape") setMenuOpen(false);
+        }
+        document.addEventListener("mousedown", onDocClick);
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+          document.removeEventListener("mousedown", onDocClick);
+          document.removeEventListener("keydown", onKeyDown);
+        };
+      }, [menuOpen]);
 
       useEffect(() => {
         if (window.FocusFlowFirebase) {
@@ -366,11 +535,11 @@
               const data = snap.data();
               if (Array.isArray(data.tasks)) {
                 skipNextCloudWriteRef.current = true;
-                setTasks(data.tasks);
+                setTasks(data.tasks.map(normalizeTaskShape));
               }
-              setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : `Cloud (${user.email || "Google"})`);
+              setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
             } else {
-              setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : `Cloud (${user.email || "Google"})`);
+              setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
             }
           },
           (err) => {
@@ -398,7 +567,7 @@
             },
             { merge: true }
           );
-          setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : `Cloud (${user.email || "Google"})`);
+          setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
           setSyncError("");
         } catch (err) {
           console.error("Opslaan mislukt:", err);
@@ -407,9 +576,11 @@
         }
       }
 
-      function updateTasks(updater) {
+      function commitTasksChange(updater, actionLabel = "Wijziging") {
         setTasks((prev) => {
+          const snapshot = JSON.parse(JSON.stringify(prev));
           const next = typeof updater === "function" ? updater(prev) : updater;
+          setUndoStack((stack) => [...stack.slice(-19), { tasks: snapshot, label: actionLabel }]);
           if (skipNextCloudWriteRef.current) {
             skipNextCloudWriteRef.current = false;
           } else {
@@ -419,8 +590,26 @@
         });
       }
 
-      function showToast(message, undoFn = null) {
-        setToast({ message, undoFn });
+      function applyDirectTasksState(nextTasks) {
+        setTasks(nextTasks);
+        saveTasksToCloud(nextTasks);
+      }
+
+      function handleUndo() {
+        setUndoStack((stack) => {
+          if (stack.length === 0) return stack;
+          const lastEntry = stack[stack.length - 1];
+          applyDirectTasksState(lastEntry.tasks);
+          setToast({
+            message: `Ongedaan gemaakt: ${lastEntry.label}`,
+            canUndo: false
+          });
+          return stack.slice(0, -1);
+        });
+      }
+
+      function showToast(message, canUndo = false) {
+        setToast({ message, canUndo });
       }
 
       useEffect(() => {
@@ -445,6 +634,7 @@
         if (!fbReady || !window.FocusFlowFirebase) return;
         const { auth, signOut } = window.FocusFlowFirebase;
         try {
+          setMenuOpen(false);
           await signOut(auth);
           showToast("Uitgelogd bij Google");
         } catch (err) {
@@ -464,145 +654,258 @@
           mode: newRecMode
         };
 
-        const created = {
+        const created = normalizeTaskShape({
           id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           title: trimmed,
+          project: activeProject !== "all" ? activeProject : newProject,
           status: "todo",
           targetDate: newDate || null,
           notes: newNotes.trim(),
+          daily: Boolean(newDaily),
+          dailyNote: newDailyNote.trim(),
           recurrence,
           completions: [],
           createdAt: new Date().toISOString()
-        };
+        });
 
-        updateTasks((prev) => [created, ...prev]);
+        commitTasksChange((prev) => [created, ...prev], `Taak "${trimmed}" toevoegen`);
         setNewTitle("");
         setNewNotes("");
+        setNewDaily(false);
+        setNewDailyNote("");
         showToast(
           created.targetDate
             ? `Taak gepland op ${formatDutchDate(created.targetDate, todayStr)}`
-            : "Taak toegevoegd aan backlog"
+            : "Taak toegevoegd aan backlog",
+          true
         );
       }
 
+      // Afronden/heropenen van taak: niet-terugkerende afgeronde taken krijgen automatisch daily: true
       function handleToggleComplete(taskId) {
         const target = tasks.find((t) => t.id === taskId);
         if (!target) return;
 
-        const snapshot = JSON.parse(JSON.stringify(tasks));
         const nowIso = new Date().toISOString();
         const completedOnStr = target.targetDate || todayStr;
-        const hasRecurrence = target.recurrence && target.recurrence.type !== "none";
+        const hasRecurrence = isRecurringTask(target);
 
-        updateTasks((prev) =>
-          prev.map((t) => {
-            if (t.id !== taskId) return t;
+        commitTasksChange(
+          (prev) =>
+            prev.map((t) => {
+              if (t.id !== taskId) return t;
 
-            if (t.status === "done") {
-              const nextCompletions = Array.isArray(t.completions) ? t.completions.slice(0, -1) : [];
-              return {
-                ...t,
-                status: "todo",
-                targetDate: t.targetDate || todayStr,
-                completions: nextCompletions
-              };
-            }
-
-            const prevCompletions = Array.isArray(t.completions) ? t.completions : [];
-            const nextCompletions = [
-              ...prevCompletions,
-              {
-                completedAt: nowIso,
-                scheduledDate: t.targetDate || todayStr
+              if (t.status === "done") {
+                const nextCompletions = Array.isArray(t.completions) ? t.completions.slice(0, -1) : [];
+                return {
+                  ...t,
+                  status: "todo",
+                  targetDate: t.targetDate || todayStr,
+                  completions: nextCompletions
+                };
               }
-            ];
 
-            if (hasRecurrence) {
-              const nextDue = computeNextDueDate(t, completedOnStr);
+              const prevCompletions = Array.isArray(t.completions) ? t.completions : [];
+              const nextCompletions = [
+                ...prevCompletions,
+                {
+                  completedAt: nowIso,
+                  scheduledDate: t.targetDate || todayStr
+                }
+              ];
+
+              if (hasRecurrence) {
+                const nextDue = computeNextDueDate(t, completedOnStr);
+                return {
+                  ...t,
+                  status: "todo",
+                  targetDate: nextDue,
+                  lastCompletedAt: nowIso,
+                  completions: nextCompletions
+                };
+              }
+
               return {
                 ...t,
-                status: "todo",
-                targetDate: nextDue,
-                lastCompletedAt: nowIso,
+                status: "done",
+                targetDate: t.targetDate || todayStr,
+                completedAt: nowIso,
+                daily: true,
                 completions: nextCompletions
               };
-            }
-
-            return {
-              ...t,
-              status: "done",
-              targetDate: t.targetDate || todayStr,
-              completedAt: nowIso,
-              completions: nextCompletions
-            };
-          })
+            }),
+          `Status van "${target.title}"`
         );
 
         if (target.status === "todo" && hasRecurrence) {
           const nextDue = computeNextDueDate(target, completedOnStr);
           showToast(
             `"${target.title}" afgerond • Volgende datum: ${formatDutchDate(nextDue, todayStr)}`,
-            () => updateTasks(snapshot)
+            true
           );
         } else if (target.status === "todo") {
-          showToast(`"${target.title}" gemarkeerd als afgerond`, () => updateTasks(snapshot));
+          showToast(`"${target.title}" afgerond en toegevoegd aan Daily`, true);
         } else {
-          showToast(`"${target.title}" weer op To do gezet`, () => updateTasks(snapshot));
+          showToast(`"${target.title}" weer op To do gezet`, true);
         }
       }
 
+      function handleToggleDaily(taskId) {
+        const target = tasks.find((t) => t.id === taskId);
+        if (!target) return;
+        const nextDaily = !Boolean(target.daily);
+        commitTasksChange(
+          (prev) => prev.map((t) => (t.id === taskId ? { ...t, daily: nextDaily } : t)),
+          nextDaily ? `"${target.title}" in Daily` : `"${target.title}" uit Daily`
+        );
+        showToast(
+          nextDaily ? `"${target.title}" gemarkeerd voor Daily` : `"${target.title}" uit Daily gehaald`,
+          true
+        );
+      }
+
+      function handleUpdateDailyNote(taskId, noteValue) {
+        commitTasksChange(
+          (prev) =>
+            prev.map((t) =>
+              t.id === taskId ? { ...t, dailyNote: noteValue } : t
+            ),
+          "Daily-notitie bijwerken"
+        );
+      }
+
+      function handleClearAllDailyFlags() {
+        const dailyIds = new Set(allDailyTasks.map((t) => t.id));
+        if (dailyIds.size === 0) return;
+        commitTasksChange(
+          (prev) => prev.map((t) => (dailyIds.has(t.id) ? { ...t, daily: false } : t)),
+          "Alle Daily-vinkjes wissen"
+        );
+        showToast("Alle Daily-vinkjes gewist", true);
+      }
+
+      function handleCopyDailySummary() {
+        if (visibleDailyTasks.length === 0) return;
+        const lines = visibleDailyTasks.map((t) => {
+          const statusPrefix = t.status === "done" ? "[✓]" : "[ ]";
+          const projLabel = getProjectMeta(t.project).label;
+          const notePart = t.dailyNote ? ` — ${t.dailyNote}` : "";
+          return `${statusPrefix} (${projLabel}) ${t.title}${notePart}`;
+        });
+        const summaryText = `Daily update (${todayStr}):\n${lines.join("\n")}`;
+
+        const tempArea = document.createElement("textarea");
+        tempArea.value = summaryText;
+        document.body.appendChild(tempArea);
+        tempArea.select();
+        try {
+          document.execCommand("copy");
+          showToast("Daily-update gekopieerd naar klembord");
+        } catch (err) {
+          setSyncError("Kopiëren naar klembord is niet gelukt.");
+        }
+        document.body.removeChild(tempArea);
+      }
+
+      function handleMoveAllOverdueToToday() {
+        if (overdueTasks.length === 0) return;
+        const overdueIds = new Set(overdueTasks.map((t) => t.id));
+        commitTasksChange(
+          (prev) =>
+            prev.map((t) =>
+              overdueIds.has(t.id)
+                ? { ...t, status: "todo", targetDate: todayStr }
+                : t
+            ),
+          `Alle verlopen taken (${overdueTasks.length}) naar vandaag`
+        );
+        showToast(`${overdueTasks.length} verlopen taak/taken verplaatst naar Vandaag`, true);
+      }
+
+      function handleMoveRemainingDayTasksToTomorrow(sourceDateStr) {
+        const remainingForDate = filteredTasks.filter(
+          (t) => t.status === "todo" && t.targetDate === sourceDateStr
+        );
+        if (remainingForDate.length === 0) return;
+        const targetIds = new Set(remainingForDate.map((t) => t.id));
+        const tomorrowStr = addDaysStr(sourceDateStr, 1);
+
+        commitTasksChange(
+          (prev) =>
+            prev.map((t) =>
+              targetIds.has(t.id)
+                ? { ...t, status: "todo", targetDate: tomorrowStr }
+                : t
+            ),
+          `Resterende taken (${remainingForDate.length}) naar ${formatDutchDate(tomorrowStr, todayStr)}`
+        );
+        showToast(
+          `${remainingForDate.length} resterende taak/taken verplaatst naar ${formatDutchDate(tomorrowStr, todayStr)}`,
+          true
+        );
+      }
+
       function handleSetTargetDate(taskId, nextDate) {
-        updateTasks((prev) =>
-          prev.map((t) =>
-            t.id === taskId
-              ? {
-                  ...t,
-                  status: "todo",
-                  targetDate: nextDate || null
-                }
-              : t
-          )
+        const target = tasks.find((t) => t.id === taskId);
+        commitTasksChange(
+          (prev) =>
+            prev.map((t) =>
+              t.id === taskId
+                ? {
+                    ...t,
+                    status: "todo",
+                    targetDate: nextDate || null
+                  }
+                : t
+            ),
+          `Datum van "${target?.title || "taak"}"`
         );
         if (nextDate) {
-          showToast(`Gepland op ${formatDutchDate(nextDate, todayStr)}`);
+          showToast(`Gepland op ${formatDutchDate(nextDate, todayStr)}`, true);
         } else {
-          showToast("Verplaatst naar de backlog");
+          showToast("Verplaatst naar de backlog", true);
         }
       }
 
       function handleDeleteTask(taskId) {
-        const snapshot = JSON.parse(JSON.stringify(tasks));
         const deleted = tasks.find((t) => t.id === taskId);
-        updateTasks((prev) => prev.filter((t) => t.id !== taskId));
+        commitTasksChange(
+          (prev) => prev.filter((t) => t.id !== taskId),
+          `"${deleted?.title || "Taak"}" verwijderen`
+        );
         if (editingTask?.id === taskId) setEditingTask(null);
-        showToast(`"${deleted?.title || "Taak"}" verwijderd`, () => updateTasks(snapshot));
+        showToast(`"${deleted?.title || "Taak"}" verwijderd`, true);
       }
 
       function handleSaveEdit(e) {
         e.preventDefault();
         if (!editingTask || !editingTask.title.trim()) return;
 
-        updateTasks((prev) =>
-          prev.map((t) =>
-            t.id === editingTask.id
-              ? {
-                  ...t,
-                  title: editingTask.title.trim(),
-                  targetDate: editingTask.targetDate || null,
-                  notes: (editingTask.notes || "").trim(),
-                  status: editingTask.status || "todo",
-                  recurrence: editingTask.recurrence || {
-                    type: "none",
-                    interval: 1,
-                    unit: "days",
-                    mode: "from_completion"
+        commitTasksChange(
+          (prev) =>
+            prev.map((t) =>
+              t.id === editingTask.id
+                ? {
+                    ...t,
+                    title: editingTask.title.trim(),
+                    targetDate: editingTask.targetDate || null,
+                    notes: (editingTask.notes || "").trim(),
+                    daily: Boolean(editingTask.daily),
+                    dailyNote: (editingTask.dailyNote || "").trim(),
+                    status: editingTask.status || "todo",
+                    recurrence: editingTask.recurrence || {
+                      type: "none",
+                      interval: 1,
+                      unit: "days",
+                      mode: "from_completion"
+                    }
                   }
-                }
-              : t
-          )
+                : t
+            ),
+          `Bewerken van "${editingTask.title.trim()}"`
         );
         setEditingTask(null);
-        showToast("Taak bijgewerkt");
+        showToast("Taak bijgewerkt", true);
       }
 
       function toggleHistoryExpand(taskId) {
@@ -610,6 +913,7 @@
       }
 
       function handleExportJson() {
+        setMenuOpen(false);
         const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -621,6 +925,7 @@
       }
 
       function handleImportJson(e) {
+        setMenuOpen(false);
         const file = e.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
@@ -628,8 +933,8 @@
           try {
             const parsed = JSON.parse(ev.target.result);
             if (!Array.isArray(parsed)) throw new Error("Ongeldig formaat");
-            updateTasks(parsed);
-            showToast(`${parsed.length} taken geïmporteerd`);
+            commitTasksChange(parsed.map(normalizeTaskShape), "JSON-import");
+            showToast(`${parsed.length} taken geïmporteerd`, true);
           } catch {
             setSyncError("Kon het JSON-bestand niet inlezen.");
           }
@@ -651,13 +956,35 @@
 
       const filteredTasks = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
-        if (!q) return tasks;
-        return tasks.filter(
-          (t) =>
+        return tasks.filter((t) => {
+          const matchesProject = activeProject === "all" || (t.project || "werk") === activeProject;
+          if (!matchesProject) return false;
+          if (!q) return true;
+          return (
             t.title.toLowerCase().includes(q) ||
-            (t.notes && t.notes.toLowerCase().includes(q))
-        );
-      }, [tasks, searchQuery]);
+            (t.notes && t.notes.toLowerCase().includes(q)) ||
+            (t.dailyNote && t.dailyNote.toLowerCase().includes(q))
+          );
+        });
+      }, [tasks, searchQuery, activeProject]);
+
+      const allDailyTasks = useMemo(() => {
+        return filteredTasks.filter((t) => Boolean(t.daily));
+      }, [filteredTasks]);
+
+      const dailyDoneTasks = useMemo(() => {
+        return allDailyTasks.filter((t) => t.status === "done");
+      }, [allDailyTasks]);
+
+      const dailyOpenTasks = useMemo(() => {
+        return allDailyTasks.filter((t) => t.status !== "done");
+      }, [allDailyTasks]);
+
+      const visibleDailyTasks = useMemo(() => {
+        if (dailyFilter === "done") return dailyDoneTasks;
+        if (dailyFilter === "todo") return dailyOpenTasks;
+        return allDailyTasks;
+      }, [allDailyTasks, dailyDoneTasks, dailyOpenTasks, dailyFilter]);
 
       const overdueTasks = useMemo(() => {
         return filteredTasks.filter(
@@ -688,7 +1015,7 @@
 
       const backlogTasks = useMemo(() => {
         return filteredTasks.filter((t) => t.status === "todo" && !t.targetDate).filter((t) => {
-          if (backlogFilter === "recurring") return t.recurrence && t.recurrence.type !== "none";
+          if (backlogFilter === "recurring") return isRecurringTask(t);
           if (backlogFilter === "notes") return Boolean(t.notes && t.notes.trim());
           return true;
         });
@@ -710,7 +1037,7 @@
                 title: t.title,
                 completedAt: c.completedAt,
                 dateStr: dtStr,
-                isRecurring: Boolean(t.recurrence && t.recurrence.type !== "none"),
+                isRecurring: isRecurringTask(t),
                 nextDue: t.targetDate
               });
             });
@@ -743,12 +1070,20 @@
         return Array.from(grouped.entries());
       }, [filteredTasks, todayStr]);
 
+      const accountLabel =
+        user && !user.isAnonymous
+          ? user.displayName || user.email || "Google-account"
+          : "Niet ingelogd met Google";
+
       function renderTaskCard(task, options = {}) {
         const { showScheduleActions = false, isCompletedEntry = false } = options;
-        const hasRecurrence = task.recurrence && task.recurrence.type !== "none";
+        const hasRecurrence = isRecurringTask(task);
         const completionsCount = Array.isArray(task.completions) ? task.completions.length : 0;
         const isHistoryOpen = Boolean(expandedHistoryIds[task.id]);
         const isDone = isCompletedEntry || task.status === "done";
+        const isDaily = Boolean(task.daily);
+        const proj = getProjectMeta(task.project);
+        const cardAccent = getActiveAccentTheme(activeProject, task.project);
 
         return (
           <div
@@ -762,7 +1097,7 @@
             className={`group rounded-xl border p-3.5 transition ${
               isDone
                 ? "border-slate-200/80 bg-slate-100/70 dark:border-slate-800 dark:bg-slate-900/50"
-                : "border-slate-200 bg-white hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-700"
+                : `border-slate-200 bg-white ${cardAccent.checkboxHover} dark:border-slate-800 dark:bg-slate-900`
             } ${draggedTaskId === task.id ? "opacity-50" : ""}`}
           >
             <div className="flex items-start gap-3">
@@ -773,7 +1108,7 @@
                 className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
                   isDone && !hasRecurrence
                     ? "border-emerald-500 bg-emerald-500 text-white"
-                    : "border-slate-300 hover:border-indigo-500 dark:border-slate-600 dark:hover:border-indigo-400"
+                    : `border-slate-300 ${cardAccent.checkboxHover} dark:border-slate-600`
                 }`}
               >
                 {isDone && !hasRecurrence && (
@@ -802,6 +1137,18 @@
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
+                      onClick={() => handleToggleDaily(task.id)}
+                      title={isDaily ? "Verwijder Daily-kenmerk" : "Neem op in Daily"}
+                      className={`rounded-lg px-2 py-1 text-xs font-medium transition ${
+                        isDaily
+                          ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/70 dark:text-amber-300"
+                          : "text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                      }`}
+                    >
+                      {isDaily ? "★ Daily" : "☆ Daily"}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setEditingTask(JSON.parse(JSON.stringify(task)))}
                       className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                     >
@@ -824,20 +1171,31 @@
                 )}
 
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-medium ${proj.accentBadge}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${proj.dotClass}`} />
+                    {proj.label}
+                  </span>
+
                   {task.targetDate && !isCompletedEntry && (
                     <span
                       className={`inline-flex items-center rounded-md px-2 py-0.5 font-medium ${
                         task.status === "todo" && task.targetDate < todayStr
                           ? "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300"
-                          : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"
+                          : cardAccent.softBtn
                       }`}
                     >
                       {formatDutchDate(task.targetDate, todayStr)} ({task.targetDate})
                     </span>
                   )}
 
+                  {isDaily && (
+                    <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                      Daily
+                    </span>
+                  )}
+
                   {hasRecurrence && (
-                    <span className="inline-flex items-center rounded-md bg-violet-50 px-2 py-0.5 font-medium text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 font-medium ${cardAccent.recurrenceBadge}`}>
                       ↻ {formatRecurrenceLabel(task.recurrence)}
                     </span>
                   )}
@@ -878,7 +1236,7 @@
                     <button
                       type="button"
                       onClick={() => handleSetTargetDate(task.id, todayStr)}
-                      className="rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
+                      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${cardAccent.softBtn}`}
                     >
                       Vandaag
                     </button>
@@ -920,78 +1278,212 @@
           <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
             <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold shadow-sm">
+                <div className={`flex h-9 w-9 items-center justify-center rounded-xl font-bold shadow-sm ${accent.primaryBtn}`}>
                   FF
                 </div>
                 <div>
                   <h1 className="text-base font-bold leading-tight">FocusFlow</h1>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
                     <span>{syncStatus}</span>
-                    {user && !user.isAnonymous && user.email && (
-                      <span className="hidden sm:inline">• {user.email}</span>
-                    )}
                   </div>
                 </div>
               </div>
 
-              <nav className="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800">
-                {[
-                  { id: "split", label: "Beide" },
-                  { id: "day", label: "Per Dag" },
-                  { id: "backlog", label: `Backlog (${backlogTasks.length})` },
-                  { id: "logbook", label: "Logboek" }
-                ].map((tab) => (
+              <div className="flex flex-col items-center gap-1.5">
+                {/* Bovenste niveau: Projecten (Werk, Verburch, Persoonlijk) + Alle */}
+                <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-xl bg-slate-100/90 p-1 text-xs font-semibold dark:bg-slate-800/90">
+                  {PROJECTS.map((proj) => {
+                    const isSelected = activeProject === proj.id;
+                    const count = tasks.filter((t) => (t.project || "werk") === proj.id).length;
+                    return (
+                      <button
+                        key={proj.id}
+                        type="button"
+                        onClick={() => setActiveProject(proj.id)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${
+                          isSelected
+                            ? `${proj.accentSolid} shadow-sm`
+                            : `${proj.accentText} hover:bg-white/70 dark:hover:bg-slate-900/60`
+                        }`}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            isSelected ? "bg-white" : proj.dotClass
+                          }`}
+                        />
+                        <span>{proj.label}</span>
+                        <span
+                          className={`rounded-full px-1.5 text-[10px] ${
+                            isSelected
+                              ? "bg-white/20 text-white"
+                              : "bg-black/5 dark:bg-white/10"
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+
                   <button
-                    key={tab.id}
                     type="button"
-                    onClick={() => setViewMode(tab.id)}
-                    className={`rounded-lg px-3 py-1.5 transition ${
-                      viewMode === tab.id
-                        ? "bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
-                        : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                    onClick={() => setActiveProject("all")}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${
+                      activeProject === "all"
+                        ? "bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
+                        : "text-purple-700 hover:bg-purple-50/80 dark:text-purple-300 dark:hover:bg-purple-950/40"
                     }`}
                   >
-                    {tab.label}
+                    <span>Alle</span>
+                    <span
+                      className={`rounded-full px-1.5 text-[10px] ${
+                        activeProject === "all"
+                          ? "bg-white/20 text-white"
+                          : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-200"
+                      }`}
+                    >
+                      {tasks.length}
+                    </span>
                   </button>
-                ))}
-              </nav>
+                </div>
+
+                {/* Onderliggende view-balk: Beide, Per Dag, Daily, Backlog, Overdue, Logboek */}
+                <nav className="flex flex-wrap items-center justify-center rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800">
+                  {[
+                    { id: "split", label: "Beide" },
+                    { id: "day", label: "Per Dag" },
+                    { id: "daily", label: `Daily (${allDailyTasks.length})` },
+                    { id: "backlog", label: `Backlog (${backlogTasks.length})` },
+                    { id: "overdue", label: `Overdue (${overdueTasks.length})` },
+                    { id: "logbook", label: "Logboek" }
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setViewMode(tab.id)}
+                      className={`rounded-lg px-3 py-1.5 transition ${
+                        viewMode === tab.id
+                          ? `bg-white font-semibold shadow-sm dark:bg-slate-900 ${accent.activeTabText}`
+                          : tab.id === "overdue" && overdueTasks.length > 0
+                          ? "text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 font-semibold"
+                          : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
 
               <div className="flex items-center gap-2">
-                {user && !user.isAnonymous ? (
-                  <button
-                    type="button"
-                    onClick={handleGoogleLogout}
-                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-                  >
-                    Uitloggen
-                  </button>
-                ) : (
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={undoStack.length === 0}
+                  title={
+                    undoStack.length > 0
+                      ? `Ongedaan maak: ${undoStack[undoStack.length - 1].label}`
+                      : "Niets om ongedaan te maken"
+                  }
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                    undoStack.length > 0
+                      ? accent.undoBtn
+                      : "cursor-not-allowed border-slate-200 text-slate-400 opacity-50 dark:border-slate-800 dark:text-slate-600"
+                  }`}
+                >
+                  Ongedaan maak{undoStack.length > 0 ? ` (${undoStack.length})` : ""}
+                </button>
+
+                {(!user || user.isAnonymous) && (
                   <button
                     type="button"
                     onClick={handleGoogleLogin}
-                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium shadow-sm ${accent.primaryBtn}`}
                   >
                     Inloggen met Google
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleExportJson}
-                  title="Exporteer als JSON"
-                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-                >
-                  Export
-                </button>
+                <div ref={menuRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen((o) => !o)}
+                    aria-expanded={menuOpen}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <span>Menu</span>
+                    <span className="text-[10px]">{menuOpen ? "▲" : "▼"}</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Importeer JSON"
-                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-                >
-                  Import
-                </button>
+                  {menuOpen && (
+                    <div className="absolute right-0 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+                      <div className="border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                          Account
+                        </div>
+                        <div className="mt-0.5 truncate text-xs font-medium text-slate-800 dark:text-slate-100">
+                          {accountLabel}
+                        </div>
+                        {user && !user.isAnonymous && user.email && user.displayName && (
+                          <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                            {user.email}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="py-1 space-y-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDarkMode((d) => !d);
+                            setMenuOpen(false);
+                          }}
+                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <span>Dark mode</span>
+                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] dark:bg-slate-800">
+                            {darkMode ? "Aan (🌙)" : "Uit (☀)"}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleExportJson}
+                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <span>Export (JSON)</span>
+                          <span className="text-slate-400">↓</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            fileInputRef.current?.click();
+                          }}
+                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <span>Import (JSON)</span>
+                          <span className="text-slate-400">↑</span>
+                        </button>
+                      </div>
+
+                      {user && !user.isAnonymous && (
+                        <div className="border-t border-slate-100 pt-1 dark:border-slate-800">
+                          <button
+                            type="button"
+                            onClick={handleGoogleLogout}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+                          >
+                            <span>Uitloggen</span>
+                            <span>→|</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -999,15 +1491,6 @@
                   onChange={handleImportJson}
                   className="hidden"
                 />
-
-                <button
-                  type="button"
-                  onClick={() => setDarkMode((d) => !d)}
-                  title="Wissel licht/donker thema"
-                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-                >
-                  {darkMode ? "☀" : "🌙"}
-                </button>
               </div>
             </div>
           </header>
@@ -1030,25 +1513,39 @@
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Nieuwe taak toevoegen..."
-                  className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950"
+                  placeholder={`Nieuwe taak toevoegen aan ${getProjectMeta(activeProject === "all" ? newProject : activeProject).label}...`}
+                  className={`flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
                 />
+                {activeProject === "all" && (
+                  <select
+                    value={newProject}
+                    onChange={(e) => setNewProject(e.target.value)}
+                    aria-label="Project kiezen"
+                    className={`rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
+                  >
+                    {PROJECTS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <input
                   type="date"
                   value={newDate}
                   onChange={(e) => setNewDate(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950"
+                  className={`rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowNewOptions((v) => !v)}
                   className="rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  {showNewOptions ? "Minder opties ▲" : "Herhalen / Notitie ▼"}
+                  {showNewOptions ? "Minder opties ▲" : "Herhalen / Daily / Notitie ▼"}
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+                  className={`rounded-xl px-5 py-2.5 text-sm font-semibold shadow-sm ${accent.primaryBtn}`}
                 >
                   Toevoegen
                 </button>
@@ -1138,6 +1635,25 @@
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                     />
                   </div>
+
+                  <div className="sm:col-span-3 flex flex-col gap-2.5 pt-1 sm:flex-row sm:items-center">
+                    <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-200 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={newDaily}
+                        onChange={(e) => setNewDaily(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      <span>Meenemen in Daily</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newDailyNote}
+                      onChange={(e) => setNewDailyNote(e.target.value)}
+                      placeholder="Optionele daily-notitie voor je stand-up..."
+                      className={`flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1149,13 +1665,13 @@
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Filter op titel of notitie..."
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950"
+                    className={`rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
                   />
                   {searchQuery && (
                     <button
                       type="button"
                       onClick={() => setSearchQuery("")}
-                      className="text-indigo-600 hover:underline dark:text-indigo-400"
+                      className={`hover:underline ${accent.activeTabText}`}
                     >
                       Wissen
                     </button>
@@ -1165,6 +1681,234 @@
               </div>
             </form>
 
+            {/* DAILY-WEERGAVE */}
+            {viewMode === "daily" && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+                  <div>
+                    <h2 className="text-lg font-bold">Daily — Overzicht &amp; Notities</h2>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      Afgeronde taken (behalve terugkerende taken) krijgen automatisch{" "}
+                      <code className="font-mono">daily</code>; je kunt dit ook handmatig aan- of uitzetten per taak.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs dark:bg-slate-800">
+                      {[
+                        { id: "all", label: `Alle (${allDailyTasks.length})` },
+                        { id: "done", label: `Afgerond (${dailyDoneTasks.length})` },
+                        { id: "todo", label: `Nog open (${dailyOpenTasks.length})` }
+                      ].map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setDailyFilter(f.id)}
+                          className={`rounded-md px-2.5 py-1 transition ${
+                            dailyFilter === f.id
+                              ? `bg-white font-semibold shadow-sm dark:bg-slate-900 ${accent.activeTabText}`
+                              : "text-slate-600 dark:text-slate-300"
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyDailySummary}
+                      disabled={visibleDailyTasks.length === 0}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-40 ${accent.undoBtn}`}
+                    >
+                      Kopieer update
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleClearAllDailyFlags}
+                      disabled={allDailyTasks.length === 0}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      Wis Daily-vinkjes
+                    </button>
+                  </div>
+                </div>
+
+                {visibleDailyTasks.length === 0 ? (
+                  <div className="mt-6 rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 dark:border-slate-800">
+                    Geen taken met <code className="font-mono">daily</code> voor dit filter. Rond een taak af of klik op{" "}
+                    <span className="font-semibold">☆ Daily</span> op een taak om hem toe te voegen aan je dagelijkse update.
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-3">
+                    {visibleDailyTasks.map((task) => {
+                      const proj = getProjectMeta(task.project);
+                      const isDone = task.status === "done";
+                      const hasRecurrence = isRecurringTask(task);
+                      return (
+                        <div
+                          key={task.id}
+                          className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/50"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleComplete(task.id)}
+                                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs ${
+                                  isDone && !hasRecurrence
+                                    ? "border-emerald-500 bg-emerald-500 text-white"
+                                    : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
+                                }`}
+                              >
+                                {isDone && !hasRecurrence ? "✓" : ""}
+                              </button>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                                    {task.title}
+                                  </span>
+                                  <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium ${proj.accentBadge}`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full ${proj.dotClass}`} />
+                                    {proj.label}
+                                  </span>
+                                  <span
+                                    className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
+                                      isDone && !hasRecurrence
+                                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300"
+                                        : "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300"
+                                    }`}
+                                  >
+                                    {isDone && !hasRecurrence ? "Afgerond" : "Nog open"}
+                                  </span>
+                                </div>
+                                {task.notes && (
+                                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                    {task.notes}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleDaily(task.id)}
+                              className="rounded-lg px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-200/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                            >
+                              Uit Daily halen
+                            </button>
+                          </div>
+
+                          <div className="mt-3 pl-7">
+                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                              Daily-notitie / update
+                            </label>
+                            <input
+                              type="text"
+                              value={task.dailyNote || ""}
+                              onChange={(e) => handleUpdateDailyNote(task.id, e.target.value)}
+                              placeholder="Wat wil je hierover vertellen in de daily of wat is de volgende stap?"
+                              className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-900 ${accent.focusRing}`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* OVERDUE WEERGAVE */}
+            {viewMode === "overdue" && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+                  <div>
+                    <h2 className="text-lg font-bold">Overdue — Verlopen taken ({overdueTasks.length})</h2>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      Openstaande taken met een streefdatum vóór vandaag ({todayStr}).
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleMoveAllOverdueToToday}
+                    disabled={overdueTasks.length === 0}
+                    className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition disabled:opacity-40 ${accent.primaryBtn}`}
+                  >
+                    Alles naar vandaag ({overdueTasks.length})
+                  </button>
+                </div>
+
+                {overdueTasks.length === 0 ? (
+                  <div className="mt-6 rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 dark:border-slate-800">
+                    Geen verlopen taken. Alles loopt op schema.
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-3">
+                    {overdueTasks.map((task) => {
+                      const proj = getProjectMeta(task.project);
+                      const rowAccent = getActiveAccentTheme(activeProject, task.project);
+                      return (
+                        <div
+                          key={task.id}
+                          className="rounded-xl border border-rose-200/80 bg-rose-50/40 p-4 dark:border-rose-900/50 dark:bg-rose-950/15"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                                  {task.title}
+                                </span>
+                                <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium ${proj.accentBadge}`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${proj.dotClass}`} />
+                                  {proj.label}
+                                </span>
+                                <span className="rounded-md bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-950/80 dark:text-rose-300">
+                                  Verlopen: {formatDutchDate(task.targetDate, todayStr)} ({task.targetDate})
+                                </span>
+                              </div>
+                              {task.notes && (
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 whitespace-pre-line">
+                                  {task.notes}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleSetTargetDate(task.id, todayStr)}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold shadow-sm transition ${rowAccent.primaryBtn}`}
+                              >
+                                Naar Vandaag
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSetTargetDate(task.id, null)}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                              >
+                                Naar Backlog
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingTask(JSON.parse(JSON.stringify(task)))}
+                                className="rounded-lg px-2.5 py-1.5 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                              >
+                                Bewerken
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* LOGBOEK WEERGAVE */}
             {viewMode === "logbook" && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <h2 className="text-lg font-bold">Logboek — Voltooide taken</h2>
@@ -1184,30 +1928,34 @@
                           {formatFullDutchDate(dtStr)} ({dtStr})
                         </h3>
                         <div className="space-y-2">
-                          {items.map((item) => (
-                            <div
-                              key={item.key}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-950/60"
-                            >
-                              <div className="flex items-center gap-2.5">
-                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                                  ✓
-                                </span>
-                                <span className="font-medium">{item.title}</span>
-                                {item.isRecurring && (
-                                  <span className="rounded-md bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-950 dark:text-violet-300">
-                                    Terugkerend
+                          {items.map((item) => {
+                            const matchedTask = tasks.find((tk) => tk.id === item.taskId);
+                            const logAccent = getActiveAccentTheme(activeProject, matchedTask?.project);
+                            return (
+                              <div
+                                key={item.key}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-950/60"
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                    ✓
                                   </span>
-                                )}
+                                  <span className="font-medium">{item.title}</span>
+                                  {item.isRecurring && (
+                                    <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${logAccent.logBadge}`}>
+                                      Terugkerend
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                  {item.completedAt ? `Om ${formatTimeOnlyNL(item.completedAt)}` : ""}
+                                  {item.isRecurring && item.nextDue
+                                    ? ` • Volgende beurt: ${formatDutchDate(item.nextDue, todayStr)}`
+                                    : ""}
+                                </div>
                               </div>
-                              <div className="text-xs text-slate-500 dark:text-slate-400">
-                                {item.completedAt ? `Om ${formatTimeOnlyNL(item.completedAt)}` : ""}
-                                {item.isRecurring && item.nextDue
-                                  ? ` • Volgende beurt: ${formatDutchDate(item.nextDue, todayStr)}`
-                                  : ""}
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -1216,7 +1964,8 @@
               </section>
             )}
 
-            {viewMode !== "logbook" && (
+            {/* SPLIT / DAG / BACKLOG WEERGAVEN */}
+            {viewMode !== "logbook" && viewMode !== "daily" && viewMode !== "overdue" && (
               <div
                 className={`grid gap-6 ${
                   viewMode === "split" ? "lg:grid-cols-12" : "grid-cols-1"
@@ -1236,7 +1985,16 @@
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {dayLayout === "focus" && selectedDateTodoTasks.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleMoveRemainingDayTasksToTomorrow(selectedDate)}
+                            className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${accent.undoBtn}`}
+                          >
+                            Resterende naar morgen ({selectedDateTodoTasks.length})
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setSelectedDate(todayStr)}
@@ -1250,7 +2008,7 @@
                             onClick={() => setDayLayout("focus")}
                             className={`rounded-md px-2.5 py-1 ${
                               dayLayout === "focus"
-                                ? "bg-white font-semibold text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
+                                ? `bg-white font-semibold shadow-sm dark:bg-slate-900 ${accent.activeTabText}`
                                 : "text-slate-600 dark:text-slate-300"
                             }`}
                           >
@@ -1261,7 +2019,7 @@
                             onClick={() => setDayLayout("agenda")}
                             className={`rounded-md px-2.5 py-1 ${
                               dayLayout === "agenda"
-                                ? "bg-white font-semibold text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
+                                ? `bg-white font-semibold shadow-sm dark:bg-slate-900 ${accent.activeTabText}`
                                 : "text-slate-600 dark:text-slate-300"
                             }`}
                           >
@@ -1280,14 +2038,16 @@
                           <button
                             type="button"
                             onClick={() => {
-                              updateTasks((prev) =>
-                                prev.map((t) =>
-                                  t.status === "todo" && t.targetDate && t.targetDate < todayStr
-                                    ? { ...t, targetDate: todayStr }
-                                    : t
-                                )
+                              commitTasksChange(
+                                (prev) =>
+                                  prev.map((t) =>
+                                    t.status === "todo" && t.targetDate && t.targetDate < todayStr
+                                      ? { ...t, targetDate: todayStr }
+                                      : t
+                                  ),
+                                "Verlopen taken naar vandaag"
                               );
-                              showToast("Alle verlopen taken naar vandaag verplaatst");
+                              showToast("Alle verlopen taken naar vandaag verplaatst", true);
                             }}
                             className="rounded-lg bg-amber-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-700"
                           >
@@ -1307,7 +2067,10 @@
                             const isSelected = dStr === selectedDate;
                             const isToday = dStr === todayStr;
                             const count = tasks.filter(
-                              (t) => t.status === "todo" && t.targetDate === dStr
+                              (t) =>
+                                t.status === "todo" &&
+                                t.targetDate === dStr &&
+                                (activeProject === "all" || (t.project || "werk") === activeProject)
                             ).length;
                             const dObj = parseDateStr(dStr);
                             const wd = dObj
@@ -1334,10 +2097,10 @@
                                 }}
                                 className={`flex flex-col items-center rounded-xl border p-2 text-center transition ${
                                   isSelected
-                                    ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+                                    ? `${accent.primaryBtn} border-transparent shadow-sm`
                                     : dragOverTarget === dStr
-                                    ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950/50"
-                                    : "border-slate-200 bg-slate-50/70 hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-950/50"
+                                    ? accent.dragOverDay
+                                    : "border-slate-200 bg-slate-50/70 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/50"
                                 }`}
                               >
                                 <span className="text-[11px] uppercase opacity-80">{wd}</span>
@@ -1349,14 +2112,14 @@
                                     isSelected
                                       ? "bg-white/20 text-white"
                                       : count > 0
-                                      ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                      ? accent.weekCountBadge
                                       : "text-slate-400"
                                   }`}
                                 >
                                   {count}
                                 </span>
                                 {isToday && !isSelected && (
-                                  <span className="mt-0.5 h-1 w-1 rounded-full bg-indigo-500" />
+                                  <span className={`mt-0.5 h-1 w-1 rounded-full ${accent.todayDot}`} />
                                 )}
                               </button>
                             );
@@ -1416,18 +2179,29 @@
                               }}
                               className={`rounded-xl border p-3.5 ${
                                 dragOverTarget === dStr
-                                  ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30"
+                                  ? accent.dropBorder
                                   : "border-slate-200/80 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-950/40"
                               }`}
                             >
-                              <div className="mb-2.5 flex items-center justify-between">
+                              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
                                 <h3 className="text-sm font-bold">
                                   {formatDutchDate(dStr, todayStr)}{" "}
                                   <span className="font-normal text-xs text-slate-500">
                                     ({dStr})
                                   </span>
                                 </h3>
-                                <span className="text-xs text-slate-500">{dayItems.length} taken</span>
+                                <div className="flex items-center gap-2">
+                                  {dayItems.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveRemainingDayTasksToTomorrow(dStr)}
+                                      className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${accent.undoBtn}`}
+                                    >
+                                      Resterende naar morgen ({dayItems.length})
+                                    </button>
+                                  )}
+                                  <span className="text-xs text-slate-500">{dayItems.length} taken</span>
+                                </div>
                               </div>
                               {dayItems.length === 0 ? (
                                 <p className="text-xs text-slate-400">Geen taken gepland.</p>
@@ -1463,7 +2237,7 @@
                     }}
                     className={`rounded-2xl border p-5 shadow-sm transition ${
                       dragOverTarget === "backlog"
-                        ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30"
+                        ? accent.dropBorder
                         : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
                     } ${viewMode === "split" ? "lg:col-span-5" : ""}`}
                   >
@@ -1487,7 +2261,7 @@
                             onClick={() => setBacklogFilter(f.id)}
                             className={`rounded-md px-2.5 py-1 ${
                               backlogFilter === f.id
-                                ? "bg-white font-semibold text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
+                                ? `bg-white font-semibold shadow-sm dark:bg-slate-900 ${accent.activeTabText}`
                                 : "text-slate-600 dark:text-slate-300"
                             }`}
                           >
@@ -1512,6 +2286,7 @@
             )}
           </main>
 
+          {/* Bewerk-modal */}
           {editingTask && (
             <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
               <form
@@ -1536,7 +2311,26 @@
                     />
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Project
+                      </label>
+                      <select
+                        value={editingTask.project || "werk"}
+                        onChange={(e) =>
+                          setEditingTask({ ...editingTask, project: e.target.value })
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        {PROJECTS.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div>
                       <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
                         Target date (leeg = backlog)
@@ -1680,13 +2474,41 @@
                       Notitie
                     </label>
                     <textarea
-                      rows="3"
+                      rows="2"
                       value={editingTask.notes || ""}
                       onChange={(e) =>
                         setEditingTask({ ...editingTask, notes: e.target.value })
                       }
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                     />
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/50 space-y-2.5">
+                    <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editingTask.daily)}
+                        onChange={(e) =>
+                          setEditingTask({ ...editingTask, daily: e.target.checked })
+                        }
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                      />
+                      <span>Meenemen in Daily</span>
+                    </label>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Daily-notitie
+                      </label>
+                      <input
+                        type="text"
+                        value={editingTask.dailyNote || ""}
+                        onChange={(e) =>
+                          setEditingTask({ ...editingTask, dailyNote: e.target.value })
+                        }
+                        placeholder="Toelichting voor je daily..."
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1700,7 +2522,7 @@
                   </button>
                   <button
                     type="submit"
-                    className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                    className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm ${accent.primaryBtn}`}
                   >
                     Opslaan
                   </button>
@@ -1709,19 +2531,20 @@
             </div>
           )}
 
+          {/* Toast melding */}
           {toast && (
             <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-medium text-white shadow-lg dark:bg-slate-100 dark:text-slate-900">
               <span>{toast.message}</span>
-              {toast.undoFn && (
+              {toast.canUndo && (
                 <button
                   type="button"
                   onClick={() => {
-                    toast.undoFn();
+                    handleUndo();
                     setToast(null);
                   }}
                   className="underline font-bold"
                 >
-                  Ongedaan maken
+                  Ongedaan maak
                 </button>
               )}
             </div>
