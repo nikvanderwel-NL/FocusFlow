@@ -589,6 +589,7 @@
       // Bewerken van taak
       const [editingTask, setEditingTask] = useState(null);
       const editFormRef = useRef(null);
+      const editNotesTextareaRef = useRef(null);
       const [expandedHistoryIds, setExpandedHistoryIds] = useState({});
       const [draggedTaskId, setDraggedTaskId] = useState(null);
       const [dragOverTarget, setDragOverTarget] = useState(null);
@@ -1079,6 +1080,85 @@
 
       function toggleHistoryExpand(taskId) {
         setExpandedHistoryIds((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
+      }
+
+      // Voeg een plaatje-Markdownregel toe op de cursorpositie of onderaan de notitie
+      function handleInsertImageMarkdown(imageUrl = "") {
+        const cleanUrl = String(imageUrl || "").trim();
+        const snippet = cleanUrl
+          ? `![Afbeelding](${cleanUrl})`
+          : `![Afbeelding](https://placehold.co/480x240)`;
+
+        setEditingTask((prev) => {
+          if (!prev) return prev;
+          const currentNotes = prev.notes || "";
+          const ta = editNotesTextareaRef.current;
+
+          if (!ta || typeof ta.selectionStart !== "number") {
+            const separator = currentNotes.trim() ? "\n" : "";
+            return { ...prev, notes: `${currentNotes}${separator}${snippet}` };
+          }
+
+          const start = ta.selectionStart;
+          const end = ta.selectionEnd;
+          const before = currentNotes.slice(0, start);
+          const after = currentNotes.slice(end);
+          const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
+          const needsTrailingNewline = after.length > 0 && !after.startsWith("\n");
+          const inserted = `${needsLeadingNewline ? "\n" : ""}${snippet}${needsTrailingNewline ? "\n" : ""}`;
+          const nextNotes = `${before}${inserted}${after}`;
+
+          requestAnimationFrame(() => {
+            if (editNotesTextareaRef.current) {
+              const nextPos = before.length + inserted.length;
+              editNotesTextareaRef.current.focus();
+              editNotesTextareaRef.current.setSelectionRange(nextPos, nextPos);
+            }
+          });
+
+          return { ...prev, notes: nextNotes };
+        });
+      }
+
+      // Ondersteun direct plakken van een afbeeldings-URL of afbeelding uit klembord in het notitieveld
+      function handleNotesPaste(e) {
+        const clipboardData = e.clipboardData;
+        if (!clipboardData) return;
+
+        // 1. Check of er een afbeelding in het klembord zit (bijv. screenshot)
+        const items = Array.from(clipboardData.items || []);
+        const imageItem = items.find((item) => item.type && item.type.startsWith("image/"));
+        if (imageItem) {
+          const file = imageItem.getAsFile();
+          if (file) {
+            e.preventDefault();
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const dataUrl = ev.target?.result;
+              if (typeof dataUrl === "string" && dataUrl.startsWith("data:image/")) {
+                // Gebruik veilige data:image/ URL rechtstreeks in Markdown
+                const snippet = `![Geplakte afbeelding](${dataUrl})`;
+                setEditingTask((prev) => {
+                  if (!prev) return prev;
+                  const currentNotes = prev.notes || "";
+                  const separator = currentNotes.trim() ? "\n" : "";
+                  return { ...prev, notes: `${currentNotes}${separator}${snippet}` };
+                });
+              }
+            };
+            reader.readAsDataURL(file);
+          }
+          return;
+        }
+
+        // 2. Check of geplakte tekst een losse afbeeldings-URL is en de gebruiker geen Markdown typt
+        const pastedText = (clipboardData.getData("text/plain") || "").trim();
+        const isDirectImageUrl =
+          /^https?:\/\/\S+\.(png|jpe?g|gif|webp|avif|svg)(\?\S*)?$/i.test(pastedText);
+        if (isDirectImageUrl) {
+          e.preventDefault();
+          handleInsertImageMarkdown(pastedText);
+        }
       }
 
       function handleExportJson() {
@@ -2766,21 +2846,41 @@
                   )}
 
                   <div>
-                    <div className="mb-1 flex items-center justify-between">
+                    <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Notitie (Markdown ondersteund: bullets `- item` en plaatjes `![alt](https://...)`)
+                        Notitie
                       </label>
-                      <span className="text-[11px] text-slate-400">
-                        Scrollt binnen het venster • Ctrl/Cmd+Enter om op te slaan
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentNotes = editingTask.notes || "";
+                            const prefix = currentNotes.length > 0 && !currentNotes.endsWith("\n") ? "\n" : "";
+                            setEditingTask({ ...editingTask, notes: `${currentNotes}${prefix}- ` });
+                            requestAnimationFrame(() => editNotesTextareaRef.current?.focus());
+                          }}
+                          className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                        >
+                          + Bullet
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleInsertImageMarkdown("")}
+                          className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition ${accent.softBtn}`}
+                        >
+                          + Plaatje invoegen
+                        </button>
+                      </div>
                     </div>
                     <textarea
+                      ref={editNotesTextareaRef}
                       rows="5"
                       value={editingTask.notes || ""}
+                      onPaste={handleNotesPaste}
                       onChange={(e) =>
                         setEditingTask({ ...editingTask, notes: e.target.value })
                       }
-                      placeholder={"Bijvoorbeeld:\n- Belangrijk punt\n- Tweede bullet\n![Voorbeeld](https://placehold.co/480x240)"}
+                      placeholder={"Typ notities, gebruik `- ` voor bullets of klik op '+ Plaatje invoegen' / plak een afbeeldingslink..."}
                       className={`max-h-60 min-h-[110px] w-full overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
                     />
                     {editingTask.notes && editingTask.notes.trim() && (
