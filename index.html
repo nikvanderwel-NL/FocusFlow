@@ -23,6 +23,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased selection:bg-indigo-500/20 selection:text-indigo-500">
   <div id="root"></div>
@@ -327,6 +328,159 @@
       });
     }
 
+    // Veilige Markdown-renderer voor notities (bullets, afbeeldingen, opmaak)
+    function isSafeImageUrl(url) {
+      if (!url || typeof url !== "string") return false;
+      const trimmed = url.trim();
+      if (trimmed.startsWith("https://") || trimmed.startsWith("http://") || trimmed.startsWith("/")) {
+        return true;
+      }
+      return false;
+    }
+
+    function escapeHtmlText(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function renderInlineMarkdown(text) {
+      let html = escapeHtmlText(text);
+      // Plaatjes: ![alt](url)
+      html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (match, alt, src) => {
+        if (!isSafeImageUrl(src)) return match;
+        const safeSrc = src.replace(/"/g, "&quot;");
+        return `<img src="${safeSrc}" alt="${alt}" loading="lazy" class="my-2 max-h-56 max-w-full rounded-xl border border-slate-200 dark:border-slate-700 object-contain" onerror="this.onerror=null;this.src='https://placehold.co/480x240/e2e8f0/475569?text=Afbeelding+niet+beschikbaar';" />`;
+      });
+      // Links: [tekst](url)
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (match, label, href) => {
+        const safeHref = href.replace(/"/g, "&quot;");
+        return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="underline text-indigo-600 dark:text-indigo-400 hover:opacity-80">${label}</a>`;
+      });
+      // Bold & italic & inline code
+      html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      html = html.replace(/`([^`]+)`/g, '<code class="rounded bg-slate-200/80 px-1 py-0.5 font-mono text-[11px] dark:bg-slate-800">$1</code>');
+      return html;
+    }
+
+    function renderNotesMarkdownHtml(markdownStr) {
+      if (!markdownStr || !markdownStr.trim()) return "";
+      try {
+        if (window.marked && typeof window.marked.parse === "function") {
+          const rawHtml = window.marked.parse(markdownStr, { breaks: true, gfm: true });
+          const container = document.createElement("div");
+          container.innerHTML = rawHtml;
+
+          // Verwijder eventuele gevaarlijke scripts/event-handlers en beveilig afbeeldingen & links
+          container.querySelectorAll("script, iframe, object, embed").forEach((el) => el.remove());
+          container.querySelectorAll("*").forEach((el) => {
+            Array.from(el.attributes).forEach((attr) => {
+              if (attr.name.toLowerCase().startsWith("on")) {
+                el.removeAttribute(attr.name);
+              }
+            });
+          });
+          container.querySelectorAll("a").forEach((a) => {
+            const href = a.getAttribute("href") || "";
+            if (!href.startsWith("https://") && !href.startsWith("http://")) {
+              a.removeAttribute("href");
+            } else {
+              a.setAttribute("target", "_blank");
+              a.setAttribute("rel", "noopener noreferrer");
+            }
+          });
+          container.querySelectorAll("img").forEach((img) => {
+            const src = img.getAttribute("src") || "";
+            if (!isSafeImageUrl(src)) {
+              img.remove();
+              return;
+            }
+            img.setAttribute("loading", "lazy");
+            img.setAttribute(
+              "onerror",
+              "this.onerror=null;this.src='https://placehold.co/480x240/e2e8f0/475569?text=Afbeelding+niet+beschikbaar';"
+            );
+          });
+
+          return container.innerHTML;
+        }
+      } catch (e) {}
+
+      // Fallback parser voor bullets, koppen en afbeeldingen
+      const lines = markdownStr.split(/\r?\n/);
+      const parts = [];
+      let inList = false;
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        const bulletMatch = line.match(/^[-*+]\s+(.*)$/);
+        if (bulletMatch) {
+          if (!inList) {
+            parts.push('<ul class="my-1.5 list-disc pl-5 space-y-1">');
+            inList = true;
+          }
+          parts.push(`<li>${renderInlineMarkdown(bulletMatch[1])}</li>`);
+        } else {
+          if (inList) {
+            parts.push("</ul>");
+            inList = false;
+          }
+          if (!line) {
+            continue;
+          } else if (line.startsWith("### ")) {
+            parts.push(`<h4 class="mt-2 font-semibold text-slate-800 dark:text-slate-100">${renderInlineMarkdown(line.slice(4))}</h4>`);
+          } else if (line.startsWith("## ")) {
+            parts.push(`<h3 class="mt-2 font-bold text-slate-900 dark:text-white">${renderInlineMarkdown(line.slice(3))}</h3>`);
+          } else if (line.startsWith("# ")) {
+            parts.push(`<h3 class="mt-2 font-bold text-slate-900 dark:text-white">${renderInlineMarkdown(line.slice(2))}</h3>`);
+          } else {
+            parts.push(`<p class="my-1">${renderInlineMarkdown(line)}</p>`);
+          }
+        }
+      }
+      if (inList) parts.push("</ul>");
+      return parts.join("");
+    }
+
+    function NotesMarkdownView({ content, className = "" }) {
+      const html = useMemo(() => renderNotesMarkdownHtml(content), [content]);
+      if (!html) return null;
+      return (
+        <div
+          className={`text-xs leading-relaxed text-slate-600 dark:text-slate-300 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1.5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1.5 [&_ol]:space-y-1 [&_p]:my-1 [&_img]:my-2 [&_img]:max-h-56 [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-slate-700 [&_a]:underline [&_a]:text-indigo-600 dark:[&_a]:text-indigo-400 ${className}`}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      );
+    }
+
+    function TaskNotesIndicator({ task, accent }) {
+      const [expanded, setExpanded] = useState(false);
+      if (!task.notes || !task.notes.trim()) return null;
+
+      return (
+        <div className="mt-1.5">
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium transition ${accent.softBtn}`}
+            title="Klik om de Markdown-notitie te tonen of te verbergen"
+          >
+            <span>📝 Notities</span>
+            <span>{expanded ? "▲" : "▼"}</span>
+          </button>
+
+          {expanded && (
+            <div className="mt-2 rounded-xl border border-slate-200/80 bg-slate-50/90 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+              <NotesMarkdownView content={task.notes} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function normalizeTaskShape(t) {
       const validProjectIds = PROJECTS.map((p) => p.id);
       return {
@@ -434,6 +588,7 @@
 
       // Bewerken van taak
       const [editingTask, setEditingTask] = useState(null);
+      const editFormRef = useRef(null);
       const [expandedHistoryIds, setExpandedHistoryIds] = useState({});
       const [draggedTaskId, setDraggedTaskId] = useState(null);
       const [dragOverTarget, setDragOverTarget] = useState(null);
@@ -487,6 +642,20 @@
           document.removeEventListener("keydown", onKeyDown);
         };
       }, [menuOpen]);
+
+      useEffect(() => {
+        if (!editingTask) return;
+        function onEditKeyDown(e) {
+          if (e.key === "Escape") {
+            setEditingTask(null);
+          } else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            editFormRef.current?.requestSubmit();
+          }
+        }
+        document.addEventListener("keydown", onEditKeyDown);
+        return () => document.removeEventListener("keydown", onEditKeyDown);
+      }, [editingTask]);
 
       useEffect(() => {
         if (window.FocusFlowFirebase) {
@@ -889,7 +1058,7 @@
                     ...t,
                     title: editingTask.title.trim(),
                     targetDate: editingTask.targetDate || null,
-                    notes: (editingTask.notes || "").trim(),
+                    notes: editingTask.notes || "",
                     daily: Boolean(editingTask.daily),
                     dailyNote: (editingTask.dailyNote || "").trim(),
                     status: editingTask.status || "todo",
@@ -1170,9 +1339,7 @@
                 </div>
 
                 {task.notes && (
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 whitespace-pre-line">
-                    {task.notes}
-                  </p>
+                  <TaskNotesIndicator task={task} accent={cardAccent} />
                 )}
 
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -1790,9 +1957,7 @@
                                     </span>
                                   </div>
                                   {task.notes && (
-                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                      {task.notes}
-                                    </p>
+                                    <TaskNotesIndicator task={task} accent={accent} />
                                   )}
                                 </div>
                               </div>
@@ -1899,9 +2064,7 @@
                                     )}
                                   </div>
                                   {task.notes && (
-                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                      {task.notes}
-                                    </p>
+                                    <TaskNotesIndicator task={task} accent={accent} />
                                   )}
                                 </div>
                               </div>
@@ -1990,9 +2153,7 @@
                                 </span>
                               </div>
                               {task.notes && (
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 whitespace-pre-line">
-                                  {task.notes}
-                                </p>
+                                <TaskNotesIndicator task={task} accent={rowAccent} />
                               )}
                             </div>
 
@@ -2406,16 +2567,31 @@
             )}
           </main>
 
-          {/* Bewerk-modal */}
+          {/* Bewerk-modal met vaste header & footer en scrollbare inhoud */}
           {editingTask && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+            <div
+              onClick={() => setEditingTask(null)}
+              className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+            >
               <form
+                ref={editFormRef}
                 onSubmit={handleSaveEdit}
-                className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+                onClick={(e) => e.stopPropagation()}
+                className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
               >
-                <h3 className="text-base font-bold">Taak bewerken</h3>
+                <div className="shrink-0 flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+                  <h3 className="text-base font-bold">Taak bewerken</h3>
+                  <button
+                    type="button"
+                    onClick={() => setEditingTask(null)}
+                    aria-label="Sluiten"
+                    className="rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  >
+                    ✕
+                  </button>
+                </div>
 
-                <div className="mt-4 space-y-3.5">
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3.5">
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
                       Titel
@@ -2426,7 +2602,7 @@
                       onChange={(e) =>
                         setEditingTask({ ...editingTask, title: e.target.value })
                       }
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
                       required
                     />
                   </div>
@@ -2590,17 +2766,31 @@
                   )}
 
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                      Notitie
-                    </label>
+                    <div className="mb-1 flex items-center justify-between">
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Notitie (Markdown ondersteund: bullets `- item` en plaatjes `![alt](https://...)`)
+                      </label>
+                      <span className="text-[11px] text-slate-400">
+                        Scrollt binnen het venster • Ctrl/Cmd+Enter om op te slaan
+                      </span>
+                    </div>
                     <textarea
-                      rows="2"
+                      rows="5"
                       value={editingTask.notes || ""}
                       onChange={(e) =>
                         setEditingTask({ ...editingTask, notes: e.target.value })
                       }
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      placeholder={"Bijvoorbeeld:\n- Belangrijk punt\n- Tweede bullet\n![Voorbeeld](https://placehold.co/480x240)"}
+                      className={`max-h-60 min-h-[110px] w-full overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-950 ${accent.focusRing}`}
                     />
+                    {editingTask.notes && editingTask.notes.trim() && (
+                      <div className="mt-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/50">
+                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                          Markdown-voorbeeld
+                        </div>
+                        <NotesMarkdownView content={editingTask.notes} />
+                      </div>
+                    )}
                   </div>
 
                   <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/50 space-y-2.5">
@@ -2632,20 +2822,25 @@
                   </div>
                 </div>
 
-                <div className="mt-5 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingTask(null)}
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                  >
-                    Annuleren
-                  </button>
-                  <button
-                    type="submit"
-                    className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm ${accent.primaryBtn}`}
-                  >
-                    Opslaan
-                  </button>
+                <div className="shrink-0 flex items-center justify-between border-t border-slate-100 bg-slate-50/60 px-6 py-3.5 dark:border-slate-800 dark:bg-slate-900/90">
+                  <span className="hidden sm:inline text-[11px] text-slate-400">
+                    Esc om te sluiten
+                  </span>
+                  <div className="ml-auto flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingTask(null)}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+                    >
+                      Annuleren
+                    </button>
+                    <button
+                      type="submit"
+                      className={`rounded-xl px-4 py-2 text-xs font-semibold shadow-sm ${accent.primaryBtn}`}
+                    >
+                      Opslaan
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
