@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FocusFlow — Task Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#172033',
+              950: '#0b1120',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased selection:bg-indigo-500/20 selection:text-indigo-500">
+  <div id="root"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+    import {
+      getAuth,
+      GoogleAuthProvider,
+      signInWithPopup,
+      signInAnonymously,
+      signOut,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      setDoc,
+      onSnapshot
+    } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCe2-lt0HcVofzHCdhgxugJv6F8DOJgi50",
+      authDomain: "focusflow-f4a6e.firebaseapp.com",
+      projectId: "focusflow-f4a6e",
+      storageBucket: "focusflow-f4a6e.firebasestorage.app",
+      messagingSenderId: "846663129847",
+      appId: "1:846663129847:web:4a9fd1defbf8241b7b51f2"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const googleProvider = new GoogleAuthProvider();
+
+    window.FocusFlowFirebase = {
+      auth,
+      db,
+      googleProvider,
+      signInWithPopup,
+      signInAnonymously,
+      signOut,
+      onAuthStateChanged,
+      doc,
+      setDoc,
+      onSnapshot
+    };
+    window.dispatchEvent(new Event("focusflow-firebase-ready"));
+  </script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    const LOCAL_STORAGE_KEY = "focusflow_tasks_v2";
+    const THEME_STORAGE_KEY = "focusflow_theme_v1";
+
+    function toDateStr(dateObj = new Date()) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+      const d = String(dateObj.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+
+    function parseDateStr(str) {
+      if (!str) return null;
+      const [y, m, d] = str.split("-").map(Number);
+      if (!y || !m || !d) return null;
+      return new Date(y, m - 1, d);
+    }
+
+    function addDaysStr(dateStr, days) {
+      const base = parseDateStr(dateStr) || new Date();
+      base.setDate(base.getDate() + days);
+      return toDateStr(base);
+    }
+
+    function addMonthsStr(dateStr, months) {
+      const base = parseDateStr(dateStr) || new Date();
+      const targetDay = base.getDate();
+      base.setDate(1);
+      base.setMonth(base.getMonth() + months);
+      const maxDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+      base.setDate(Math.min(targetDay, maxDay));
+      return toDateStr(base);
+    }
+
+    function computeNextDueDate(task, completedDateStr) {
+      const rec = task.recurrence;
+      if (!rec || rec.type === "none") return null;
+
+      const mode = rec.mode || "from_completion";
+      const anchorStr = mode === "from_due" && task.targetDate ? task.targetDate : completedDateStr;
+      const anchorDate = parseDateStr(anchorStr) || new Date();
+
+      if (rec.type === "daily") {
+        return addDaysStr(anchorStr, 1);
+      }
+
+      if (rec.type === "weekdays") {
+        let candidate = addDaysStr(anchorStr, 1);
+        while ([0, 6].includes(parseDateStr(candidate).getDay())) {
+          candidate = addDaysStr(candidate, 1);
+        }
+        return candidate;
+      }
+
+      if (rec.type === "weekly") {
+        return addDaysStr(anchorStr, 7);
+      }
+
+      if (rec.type === "biweekly") {
+        return addDaysStr(anchorStr, 14);
+      }
+
+      if (rec.type === "monthly") {
+        return addMonthsStr(anchorStr, 1);
+      }
+
+      if (rec.type === "custom") {
+        const interval = Math.max(1, Number(rec.interval) || 1);
+        const unit = rec.unit || "days";
+        if (unit === "days") return addDaysStr(anchorStr, interval);
+        if (unit === "weeks") return addDaysStr(anchorStr, interval * 7);
+        if (unit === "months") return addMonthsStr(anchorStr, interval);
+      }
+
+      return addDaysStr(anchorStr, 7);
+    }
+
+    function formatRecurrenceLabel(rec) {
+      if (!rec || rec.type === "none") return "";
+      const modeSuffix = rec.mode === "from_due" ? " (vaste cadans)" : " (vanaf afronden)";
+      if (rec.type === "daily") return "Dagelijks" + modeSuffix;
+      if (rec.type === "weekdays") return "Werkdagen (ma–vr)" + modeSuffix;
+      if (rec.type === "weekly") return "Wekelijks" + modeSuffix;
+      if (rec.type === "biweekly") return "Elke 2 weken" + modeSuffix;
+      if (rec.type === "monthly") return "Maandelijks" + modeSuffix;
+      if (rec.type === "custom") {
+        const n = Math.max(1, Number(rec.interval) || 1);
+        const unitMap = {
+          days: n === 1 ? "dag" : "dagen",
+          weeks: n === 1 ? "week" : "weken",
+          months: n === 1 ? "maand" : "maanden"
+        };
+        return `Elke ${n} ${unitMap[rec.unit || "days"]}` + modeSuffix;
+      }
+      return "";
+    }
+
+    function formatDutchDate(dateStr, todayStr) {
+      if (!dateStr) return "Geen datum";
+      const tomorrowStr = addDaysStr(todayStr, 1);
+      const yesterdayStr = addDaysStr(todayStr, -1);
+      if (dateStr === todayStr) return "Vandaag";
+      if (dateStr === tomorrowStr) return "Morgen";
+      if (dateStr === yesterdayStr) return "Gisteren";
+
+      const d = parseDateStr(dateStr);
+      if (!d) return dateStr;
+      return d.toLocaleDateString("nl-NL", {
+        weekday: "short",
+        day: "numeric",
+        month: "short"
+      });
+    }
+
+    function formatFullDutchDate(dateStr) {
+      const d = parseDateStr(dateStr);
+      if (!d) return dateStr;
+      return d.toLocaleDateString("nl-NL", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+      });
+    }
+
+    function formatDateTimeNL(isoStr) {
+      if (!isoStr) return "";
+      const d = new Date(isoStr);
+      if (Number.isNaN(d.getTime())) return isoStr;
+      return d.toLocaleString("nl-NL", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    }
+
+    function formatTimeOnlyNL(isoStr) {
+      if (!isoStr) return "";
+      const d = new Date(isoStr);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleTimeString("nl-NL", {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    }
+
+    const INITIAL_TASKS = [
+      {
+        id: "t-1",
+        title: "Weekprioriteiten bepalen in FocusFlow",
+        status: "todo",
+        targetDate: toDateStr(),
+        notes: "Kies maximaal 3 belangrijke taken voor vandaag.",
+        recurrence: { type: "weekly", interval: 1, unit: "weeks", mode: "from_completion" },
+        completions: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: "t-2",
+        title: "Inbox opschonen en losse notities verwerken",
+        status: "todo",
+        targetDate: toDateStr(),
+        notes: "",
+        recurrence: { type: "weekdays", interval: 1, unit: "days", mode: "from_completion" },
+        completions: [],
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: "t-3",
+        title: "Ideeën voor nieuwe projecten uitwerken",
+        status: "todo",
+        targetDate: null,
+        notes: "Staat in de backlog tot er tijd vrij is.",
+        recurrence: { type: "none", interval: 1, unit: "days", mode: "from_completion" },
+        completions: [],
+        createdAt: new Date().toISOString()
+      }
+    ];
+
+    function App() {
+      const [tasks, setTasks] = useState(() => {
+        try {
+          const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) return parsed;
+          }
+        } catch (e) {}
+        return INITIAL_TASKS;
+      });
+
+      const [darkMode, setDarkMode] = useState(() => {
+        try {
+          const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+          if (savedTheme !== null) return savedTheme === "true";
+        } catch (e) {}
+        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      });
+
+      const [viewMode, setViewMode] = useState(() => (window.innerWidth < 768 ? "day" : "split"));
+      const [dayLayout, setDayLayout] = useState("focus"); // "focus" | "agenda"
+      const [selectedDate, setSelectedDate] = useState(() => toDateStr());
+      const [showDoneInDay, setShowDoneInDay] = useState(true);
+      const [backlogFilter, setBacklogFilter] = useState("all"); // "all" | "recurring" | "notes"
+      const [searchQuery, setSearchQuery] = useState("");
+
+      // Nieuwe taak invoer
+      const [newTitle, setNewTitle] = useState("");
+      const [newDate, setNewDate] = useState(() => toDateStr());
+      const [newNotes, setNewNotes] = useState("");
+      const [newRecType, setNewRecType] = useState("none");
+      const [newRecInterval, setNewRecInterval] = useState(1);
+      const [newRecUnit, setNewRecUnit] = useState("days");
+      const [newRecMode, setNewRecMode] = useState("from_completion");
+      const [showNewOptions, setShowNewOptions] = useState(false);
+
+      // Bewerken van taak
+      const [editingTask, setEditingTask] = useState(null);
+      const [expandedHistoryIds, setExpandedHistoryIds] = useState({});
+      const [draggedTaskId, setDraggedTaskId] = useState(null);
+      const [dragOverTarget, setDragOverTarget] = useState(null);
+      const [toast, setToast] = useState(null);
+
+      // Firebase auth & sync state
+      const [fbReady, setFbReady] = useState(Boolean(window.FocusFlowFirebase));
+      const [user, setUser] = useState(null);
+      const [syncStatus, setSyncStatus] = useState("Lokaal");
+      const [syncError, setSyncError] = useState("");
+      const skipNextCloudWriteRef = useRef(false);
+      const fileInputRef = useRef(null);
+
+      const todayStr = toDateStr();
+
+      useEffect(() => {
+        document.documentElement.classList.toggle("dark", darkMode);
+        try {
+          localStorage.setItem(THEME_STORAGE_KEY, String(darkMode));
+        } catch (e) {}
+      }, [darkMode]);
+
+      useEffect(() => {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
+        } catch (e) {}
+      }, [tasks]);
+
+      useEffect(() => {
+        if (window.FocusFlowFirebase) {
+          setFbReady(true);
+          return;
+        }
+        const onReady = () => setFbReady(true);
+        window.addEventListener("focusflow-firebase-ready", onReady);
+        return () => window.removeEventListener("focusflow-firebase-ready", onReady);
+      }, []);
+
+      // Auth listener
+      useEffect(() => {
+        if (!fbReady || !window.FocusFlowFirebase) return;
+        const { auth, onAuthStateChanged, signInAnonymously } = window.FocusFlowFirebase;
+
+        const unsub = onAuthStateChanged(auth, async (currentUser) => {
+          if (currentUser) {
+            setUser(currentUser);
+            setSyncError("");
+          } else {
+            setUser(null);
+            try {
+              setSyncStatus("Verbinden...");
+              await signInAnonymously(auth);
+            } catch (err) {
+              setSyncStatus("Alleen lokaal");
+            }
+          }
+        });
+
+        return () => unsub();
+      }, [fbReady]);
+
+      // Firestore realtime sync
+      useEffect(() => {
+        if (!fbReady || !window.FocusFlowFirebase || !user) return;
+        const { db, doc, onSnapshot } = window.FocusFlowFirebase;
+
+        setSyncStatus("Synchroniseren...");
+        const userDocRef = doc(db, "focusflow_users", user.uid);
+
+        const unsub = onSnapshot(
+          userDocRef,
+          (snap) => {
+            setSyncError("");
+            if (snap.exists()) {
+              const data = snap.data();
+              if (Array.isArray(data.tasks)) {
+                skipNextCloudWriteRef.current = true;
+                setTasks(data.tasks);
+              }
+              setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : `Cloud (${user.email || "Google"})`);
+            } else {
+              // Eerste keer: schrijf huidige lokale taken naar Firestore
+              setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : `Cloud (${user.email || "Google"})`);
+            }
+          },
+          (err) => {
+            console.error("Firestore fout:", err);
+            setSyncStatus("Fout bij sync");
+            setSyncError(err.message || "Geen toegang tot Firestore. Controleer je Firestore Rules.");
+          }
+        );
+
+        return () => unsub();
+      }, [fbReady, user]);
+
+      async function saveTasksToCloud(nextTasks) {
+        if (!fbReady || !window.FocusFlowFirebase || !user) return;
+        const { db, doc, setDoc } = window.FocusFlowFirebase;
+        try {
+          setSyncStatus("Opslaan...");
+          const userDocRef = doc(db, "focusflow_users", user.uid);
+          await setDoc(
+            userDocRef,
+            {
+              tasks: nextTasks,
+              updatedAt: new Date().toISOString(),
+              ownerEmail: user.email || null
+            },
+            { merge: true }
+          );
+          setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : `Cloud (${user.email || "Google"})`);
+          setSyncError("");
+        } catch (err) {
+          console.error("Opslaan mislukt:", err);
+          setSyncStatus("Fout bij opslaan");
+          setSyncError(err.message || "Kon niet opslaan in Firestore.");
+        }
+      }
+
+      function updateTasks(updater) {
+        setTasks((prev) => {
+          const next = typeof updater === "function" ? updater(prev) : updater;
+          if (skipNextCloudWriteRef.current) {
+            skipNextCloudWriteRef.current = false;
+          } else {
+            saveTasksToCloud(next);
+          }
+          return next;
+        });
+      }
+
+      function showToast(message, undoFn = null) {
+        setToast({ message, undoFn });
+      }
+
+      useEffect(() => {
+        if (!toast) return;
+        const timer = setTimeout(() => setToast(null), 5000);
+        return () => clearTimeout(timer);
+      }, [toast]);
+
+      async function handleGoogleLogin() {
+        if (!fbReady || !window.FocusFlowFirebase) return;
+        const { auth, googleProvider, signInWithPopup } = window.FocusFlowFirebase;
+        try {
+          setSyncError("");
+          await signInWithPopup(auth, googleProvider);
+          showToast("Ingelogd met Google");
+        } catch (err) {
+          setSyncError(err.message || "Inloggen met Google is geannuleerd of mislukt.");
+        }
+      }
+
+      async function handleGoogleLogout() {
+        if (!fbReady || !window.FocusFlowFirebase) return;
+        const { auth, signOut } = window.FocusFlowFirebase;
+        try {
+          await signOut(auth);
+          showToast("Uitgelogd bij Google");
+        } catch (err) {
+          setSyncError(err.message || "Uitloggen mislukt.");
+        }
+      }
+
+      function handleAddTask(e) {
+        e.preventDefault();
+        const trimmed = newTitle.trim();
+        if (!trimmed) return;
+
+        const recurrence = {
+          type: newRecType,
+          interval: Math.max(1, Number(newRecInterval) || 1),
+          unit: newRecUnit,
+          mode: newRecMode
+        };
+
+        const created = {
+          id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          title: trimmed,
+          status: "todo",
+          targetDate: newDate || null,
+          notes: newNotes.trim(),
+          recurrence,
+          completions: [],
+          createdAt: new Date().toISOString()
+        };
+
+        updateTasks((prev) => [created, ...prev]);
+        setNewTitle("");
+        setNewNotes("");
+        showToast(
+          created.targetDate
+            ? `Taak gepland op ${formatDutchDate(created.targetDate, todayStr)}`
+            : "Taak toegevoegd aan backlog"
+        );
+      }
+
+      function handleToggleComplete(taskId) {
+        const target = tasks.find((t) => t.id === taskId);
+        if (!target) return;
+
+        const snapshot = JSON.parse(JSON.stringify(tasks));
+        const nowIso = new Date().toISOString();
+        const completedOnStr = target.targetDate || todayStr;
+        const hasRecurrence = target.recurrence && target.recurrence.type !== "none";
+
+        updateTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t;
+
+            if (t.status === "done") {
+              // Terugzetten naar to do en laatste voltooiing verwijderen indien van vandaag/afgerond
+              const nextCompletions = Array.isArray(t.completions) ? t.completions.slice(0, -1) : [];
+              return {
+                ...t,
+                status: "todo",
+                targetDate: t.targetDate || todayStr,
+                completions: nextCompletions
+              };
+            }
+
+            // Afronden
+            const prevCompletions = Array.isArray(t.completions) ? t.completions : [];
+            const nextCompletions = [
+              ...prevCompletions,
+              {
+                completedAt: nowIso,
+                scheduledDate: t.targetDate || todayStr
+              }
+            ];
+
+            if (hasRecurrence) {
+              const nextDue = computeNextDueDate(t, completedOnStr);
+              return {
+                ...t,
+                status: "todo",
+                targetDate: nextDue,
+                lastCompletedAt: nowIso,
+                completions: nextCompletions
+              };
+            }
+
+            return {
+              ...t,
+              status: "done",
+              targetDate: t.targetDate || todayStr,
+              completedAt: nowIso,
+              completions: nextCompletions
+            };
+          })
+        );
+
+        if (target.status === "todo" && hasRecurrence) {
+          const nextDue = computeNextDueDate(target, completedOnStr);
+          showToast(
+            `"${target.title}" afgerond • Volgende datum: ${formatDutchDate(nextDue, todayStr)}`,
+            () => updateTasks(snapshot)
+          );
+        } else if (target.status === "todo") {
+          showToast(`"${target.title}" gemarkeerd als afgerond`, () => updateTasks(snapshot));
+        } else {
+          showToast(`"${target.title}" weer op To do gezet`, () => updateTasks(snapshot));
+        }
+      }
+
+      function handleSetTargetDate(taskId, nextDate) {
+        updateTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId
+              ? {
+                  ...t,
+                  status: "todo",
+                  targetDate: nextDate || null
+                }
+              : t
+          )
+        );
+        if (nextDate) {
+          showToast(`Gepland op ${formatDutchDate(nextDate, todayStr)}`);
+        } else {
+          showToast("Verplaatst naar de backlog");
+        }
+      }
+
+      function handleDeleteTask(taskId) {
+        const snapshot = JSON.parse(JSON.stringify(tasks));
+        const deleted = tasks.find((t) => t.id === taskId);
+        updateTasks((prev) => prev.filter((t) => t.id !== taskId));
+        if (editingTask?.id === taskId) setEditingTask(null);
+        showToast(`"${deleted?.title || "Taak"}" verwijderd`, () => updateTasks(snapshot));
+      }
+
+      function handleSaveEdit(e) {
+        e.preventDefault();
+        if (!editingTask || !editingTask.title.trim()) return;
+
+        updateTasks((prev) =>
+          prev.map((t) =>
+            t.id === editingTask.id
+              ? {
+                  ...t,
+                  title: editingTask.title.trim(),
+                  targetDate: editingTask.targetDate || null,
+                  notes: (editingTask.notes || "").trim(),
+                  status: editingTask.status || "todo",
+                  recurrence: editingTask.recurrence || {
+                    type: "none",
+                    interval: 1,
+                    unit: "days",
+                    mode: "from_completion"
+                  }
+                }
+              : t
+          )
+        );
+        setEditingTask(null);
+        showToast("Taak bijgewerkt");
+      }
+
+      function toggleHistoryExpand(taskId) {
+        setExpandedHistoryIds((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
+      }
+
+      function handleExportJson() {
+        const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `focusflow-backup-${todayStr}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("Backup (JSON) gedownload");
+      }
+
+      function handleImportJson(e) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const parsed = JSON.parse(ev.target.result);
+            if (!Array.isArray(parsed)) throw new Error("Ongeldig formaat");
+            updateTasks(parsed);
+            showToast(`${parsed.length} taken geïmporteerd`);
+          } catch {
+            setSyncError("Kon het JSON-bestand niet inlezen.");
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = "";
+      }
+
+      // 7-daagse strip vanaf selectedDate
+      const weekDays = useMemo(() => {
+        const base = parseDateStr(selectedDate) || new Date();
+        // Start op maandag van de huidige week of geselecteerde datum
+        const list = [];
+        for (let i = -1; i <= 5; i++) {
+          const d = new Date(base);
+          d.setDate(base.getDate() + i);
+          list.push(toDateStr(d));
+        }
+        return list;
+      }, [selectedDate]);
+
+      const filteredTasks = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return tasks;
+        return tasks.filter(
+          (t) =>
+            t.title.toLowerCase().includes(q) ||
+            (t.notes && t.notes.toLowerCase().includes(q))
+        );
+      }, [tasks, searchQuery]);
+
+      const overdueTasks = useMemo(() => {
+        return filteredTasks.filter(
+          (t) => t.status === "todo" && t.targetDate && t.targetDate < todayStr
+        );
+      }, [filteredTasks, todayStr]);
+
+      const selectedDateTodoTasks = useMemo(() => {
+        return filteredTasks.filter(
+          (t) => t.status === "todo" && t.targetDate === selectedDate
+        );
+      }, [filteredTasks, selectedDate]);
+
+      const selectedDateDoneTasks = useMemo(() => {
+        return filteredTasks.filter((t) => {
+          if (t.status === "done" && (t.targetDate === selectedDate || (!t.targetDate && selectedDate === todayStr))) {
+            return true;
+          }
+          // Ook terugkerende taken die op deze dag zijn voltooid tonen onder 'Afgerond op deze dag'
+          if (Array.isArray(t.completions)) {
+            return t.completions.some((c) => {
+              const cDate = c.completedAt ? toDateStr(new Date(c.completedAt)) : c.scheduledDate;
+              return cDate === selectedDate;
+            });
+          }
+          return false;
+        });
+      }, [filteredTasks, selectedDate, todayStr]);
+
+      const backlogTasks = useMemo(() => {
+        return filteredTasks.filter((t) => t.status === "todo" && !t.targetDate).filter((t) => {
+          if (backlogFilter === "recurring") return t.recurrence && t.recurrence.type !== "none";
+          if (backlogFilter === "notes") return Boolean(t.notes && t.notes.trim());
+          return true;
+        });
+      }, [filteredTasks, backlogFilter]);
+
+      const upcomingDaysList = useMemo(() => {
+        return Array.from({ length: 7 }, (_, idx) => addDaysStr(todayStr, idx));
+      }, [todayStr]);
+
+      // Logboek gegroepeerd op datum van voltooiing
+      const logbookEntriesByDate = useMemo(() => {
+        const entries = [];
+        for (const t of filteredTasks) {
+          if (Array.isArray(t.completions) && t.completions.length > 0) {
+            t.completions.forEach((c, idx) => {
+              const dtStr = c.completedAt ? toDateStr(new Date(c.completedAt)) : c.scheduledDate || todayStr;
+              entries.push({
+                key: `${t.id}-${idx}-${c.completedAt || idx}`,
+                taskId: t.id,
+                title: t.title,
+                completedAt: c.completedAt,
+                dateStr: dtStr,
+                isRecurring: Boolean(t.recurrence && t.recurrence.type !== "none"),
+                nextDue: t.targetDate
+              });
+            });
+          } else if (t.status === "done") {
+            const dtStr = t.completedAt ? toDateStr(new Date(t.completedAt)) : t.targetDate || todayStr;
+            entries.push({
+              key: `${t.id}-done`,
+              taskId: t.id,
+              title: t.title,
+              completedAt: t.completedAt,
+              dateStr: dtStr,
+              isRecurring: false,
+              nextDue: null
+            });
+          }
+        }
+
+        entries.sort((a, b) => {
+          if (a.completedAt && b.completedAt) {
+            return new Date(b.completedAt) - new Date(a.completedAt);
+          }
+          return b.dateStr.localeCompare(a.dateStr);
+        });
+
+        const grouped = new Map();
+        for (const item of entries) {
+          if (!grouped.has(item.dateStr)) grouped.set(item.dateStr, []);
+          grouped.get(item.dateStr).push(item);
+        }
+        return Array.from(grouped.entries());
+      }, [filteredTasks, todayStr]);
+
+      function renderTaskCard(task, options = {}) {
+        const { showScheduleActions = false, isCompletedEntry = false } = options;
+        const hasRecurrence = task.recurrence && task.recurrence.type !== "none";
+        const completionsCount = Array.isArray(task.completions) ? task.completions.length : 0;
+        const isHistoryOpen = Boolean(expandedHistoryIds[task.id]);
+        const isDone = isCompletedEntry || task.status === "done";
+
+        return (
+          <div
+            key={task.id + (isCompletedEntry ? "-done" : "")}
+            draggable={!isCompletedEntry}
+            onDragStart={() => setDraggedTaskId(task.id)}
+            onDragEnd={() => {
+              setDraggedTaskId(null);
+              setDragOverTarget(null);
+            }}
+            className={`group rounded-xl border p-3.5 transition ${
+              isDone
+                ? "border-slate-200/80 bg-slate-100/70 dark:border-slate-800 dark:bg-slate-900/50"
+                : "border-slate-200 bg-white hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-700"
+            } ${draggedTaskId === task.id ? "opacity-50" : ""}`}
+          >
+            <div className="flex items-start gap-3">
+              <button
+                type="button"
+                onClick={() => handleToggleComplete(task.id)}
+                title={isDone && !hasRecurrence ? "Zet terug op To do" : "Markeer als gedaan"}
+                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
+                  isDone && !hasRecurrence
+                    ? "border-emerald-500 bg-emerald-500 text-white"
+                    : "border-slate-300 hover:border-indigo-500 dark:border-slate-600 dark:hover:border-indigo-400"
+                }`}
+              >
+                {isDone && !hasRecurrence && (
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                )}
+              </button>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span
+                    className={`text-sm font-medium ${
+                      isDone && !hasRecurrence
+                        ? "line-through text-slate-400 dark:text-slate-500"
+                        : "text-slate-900 dark:text-slate-100"
+                    }`}
+                  >
+                    {task.title}
+                  </span>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingTask(JSON.parse(JSON.stringify(task)))}
+                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    >
+                      Bewerken
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTask(task.id)}
+                      className="rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
+                    >
+                      Verwijderen
+                    </button>
+                  </div>
+                </div>
+
+                {task.notes && (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 whitespace-pre-line">
+                    {task.notes}
+                  </p>
+                )}
+
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  {task.targetDate && !isCompletedEntry && (
+                    <span
+                      className={`inline-flex items-center rounded-md px-2 py-0.5 font-medium ${
+                        task.status === "todo" && task.targetDate < todayStr
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300"
+                          : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"
+                      }`}
+                    >
+                      {formatDutchDate(task.targetDate, todayStr)} ({task.targetDate})
+                    </span>
+                  )}
+
+                  {hasRecurrence && (
+                    <span className="inline-flex items-center rounded-md bg-violet-50 px-2 py-0.5 font-medium text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                      ↻ {formatRecurrenceLabel(task.recurrence)}
+                    </span>
+                  )}
+
+                  {completionsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => toggleHistoryExpand(task.id)}
+                      className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+                    >
+                      ✓ {completionsCount}x gedaan {isHistoryOpen ? "▲" : "▼"}
+                    </button>
+                  )}
+                </div>
+
+                {isHistoryOpen && completionsCount > 0 && (
+                  <div className="mt-2.5 rounded-lg border border-slate-200/80 bg-slate-50 p-2.5 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                    <div className="mb-1.5 font-semibold text-slate-600 dark:text-slate-300">
+                      Voltooiingshistorie:
+                    </div>
+                    <ul className="space-y-1 text-slate-500 dark:text-slate-400">
+                      {[...task.completions].reverse().map((c, idx) => (
+                        <li key={idx} className="flex items-center justify-between gap-2">
+                          <span>Gedaan op {formatDateTimeNL(c.completedAt)}</span>
+                          {c.scheduledDate && (
+                            <span className="text-[11px] text-slate-400">
+                              (gepland: {c.scheduledDate})
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {showScheduleActions && (
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                    <button
+                      type="button"
+                      onClick={() => handleSetTargetDate(task.id, todayStr)}
+                      className="rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
+                    >
+                      Vandaag
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetTargetDate(task.id, addDaysStr(todayStr, 1))}
+                      className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      Morgen
+                    </button>
+                    <label className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      <span>Datum:</span>
+                      <input
+                        type="date"
+                        value={task.targetDate || ""}
+                        onChange={(e) => handleSetTargetDate(task.id, e.target.value || null)}
+                        className="bg-transparent text-xs outline-none"
+                      />
+                    </label>
+                    {task.targetDate && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetTargetDate(task.id, null)}
+                        className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      >
+                        Naar backlog
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen pb-24">
+          {/* Bovenbalk */}
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+            <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold shadow-sm">
+                  FF
+                </div>
+                <div>
+                  <h1 className="text-base font-bold leading-tight">FocusFlow</h1>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <span>{syncStatus}</span>
+                    {user && !user.isAnonymous && user.email && (
+                      <span className="hidden sm:inline">• {user.email}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Weergave-schakelaars */}
+              <nav className="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800">
+                {[
+                  { id: "split", label: "Beide" },
+                  { id: "day", label: "Per Dag" },
+                  { id: "backlog", label: `Backlog (${backlogTasks.length})` },
+                  { id: "logbook", label: "Logboek" }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setViewMode(tab.id)}
+                    className={`rounded-lg px-3 py-1.5 transition ${
+                      viewMode === tab.id
+                        ? "bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
+                        : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+
+              {/* Acties rechtsboven */}
+              <div className="flex items-center gap-2">
+                {user && !user.isAnonymous ? (
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogout}
+                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    Uitloggen
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                  >
+                    Inloggen met Google
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleExportJson}
+                  title="Exporteer als JSON"
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  Export
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Importeer JSON"
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  Import
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/json"
+                  onChange={handleImportJson}
+                  className="hidden"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setDarkMode((d) => !d)}
+                  title="Wissel licht/donker thema"
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  {darkMode ? "☀" : "🌙"}
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {syncError && (
+            <div className="mx-auto mt-3 max-w-7xl px-4">
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/60 dark:text-rose-200">
+                <strong>Melding:</strong> {syncError}
+              </div>
+            </div>
+          )}
+
+          <main className="mx-auto max-w-7xl px-4 pt-5">
+            {/* Nieuwe taak toevoegen */}
+            <form
+              onSubmit={handleAddTask}
+              className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="Nieuwe taak toevoegen..."
+                  className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950"
+                />
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewOptions((v) => !v)}
+                  className="rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  {showNewOptions ? "Minder opties ▲" : "Herhalen / Notitie ▼"}
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+                >
+                  Toevoegen
+                </button>
+              </div>
+
+              {showNewOptions && (
+                <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                      Herhaling
+                    </label>
+                    <select
+                      value={newRecType}
+                      onChange={(e) => setNewRecType(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    >
+                      <option value="none">Niet herhalend</option>
+                      <option value="daily">Dagelijks</option>
+                      <option value="weekdays">Werkdagen (ma–vr)</option>
+                      <option value="weekly">Wekelijks</option>
+                      <option value="biweekly">Elke 2 weken</option>
+                      <option value="monthly">Maandelijks</option>
+                      <option value="custom">Aangepast interval...</option>
+                    </select>
+                  </div>
+
+                  {newRecType !== "none" && (
+                    <>
+                      {newRecType === "custom" ? (
+                        <div className="flex gap-2">
+                          <div className="w-24">
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              Elke
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={newRecInterval}
+                              onChange={(e) => setNewRecInterval(e.target.value)}
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              Eenheid
+                            </label>
+                            <select
+                              value={newRecUnit}
+                              onChange={(e) => setNewRecUnit(e.target.value)}
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                            >
+                              <option value="days">Dagen</option>
+                              <option value="weeks">Weken</option>
+                              <option value="months">Maanden</option>
+                            </select>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="hidden sm:block" />
+                      )}
+
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                          Nieuwe datum berekenen
+                        </label>
+                        <select
+                          value={newRecMode}
+                          onChange={(e) => setNewRecMode(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border
