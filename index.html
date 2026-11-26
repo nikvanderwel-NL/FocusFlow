@@ -115,7 +115,6 @@
 
       const mode = rec.mode || "from_completion";
       const anchorStr = mode === "from_due" && task.targetDate ? task.targetDate : completedDateStr;
-      const anchorDate = parseDateStr(anchorStr) || new Date();
 
       if (rec.type === "daily") {
         return addDaysStr(anchorStr, 1);
@@ -277,13 +276,12 @@
       });
 
       const [viewMode, setViewMode] = useState(() => (window.innerWidth < 768 ? "day" : "split"));
-      const [dayLayout, setDayLayout] = useState("focus"); // "focus" | "agenda"
+      const [dayLayout, setDayLayout] = useState("focus");
       const [selectedDate, setSelectedDate] = useState(() => toDateStr());
       const [showDoneInDay, setShowDoneInDay] = useState(true);
-      const [backlogFilter, setBacklogFilter] = useState("all"); // "all" | "recurring" | "notes"
+      const [backlogFilter, setBacklogFilter] = useState("all");
       const [searchQuery, setSearchQuery] = useState("");
 
-      // Nieuwe taak invoer
       const [newTitle, setNewTitle] = useState("");
       const [newDate, setNewDate] = useState(() => toDateStr());
       const [newNotes, setNewNotes] = useState("");
@@ -293,14 +291,12 @@
       const [newRecMode, setNewRecMode] = useState("from_completion");
       const [showNewOptions, setShowNewOptions] = useState(false);
 
-      // Bewerken van taak
       const [editingTask, setEditingTask] = useState(null);
       const [expandedHistoryIds, setExpandedHistoryIds] = useState({});
       const [draggedTaskId, setDraggedTaskId] = useState(null);
       const [dragOverTarget, setDragOverTarget] = useState(null);
       const [toast, setToast] = useState(null);
 
-      // Firebase auth & sync state
       const [fbReady, setFbReady] = useState(Boolean(window.FocusFlowFirebase));
       const [user, setUser] = useState(null);
       const [syncStatus, setSyncStatus] = useState("Lokaal");
@@ -333,7 +329,6 @@
         return () => window.removeEventListener("focusflow-firebase-ready", onReady);
       }, []);
 
-      // Auth listener
       useEffect(() => {
         if (!fbReady || !window.FocusFlowFirebase) return;
         const { auth, onAuthStateChanged, signInAnonymously } = window.FocusFlowFirebase;
@@ -356,7 +351,6 @@
         return () => unsub();
       }, [fbReady]);
 
-      // Firestore realtime sync
       useEffect(() => {
         if (!fbReady || !window.FocusFlowFirebase || !user) return;
         const { db, doc, onSnapshot } = window.FocusFlowFirebase;
@@ -376,7 +370,6 @@
               }
               setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : `Cloud (${user.email || "Google"})`);
             } else {
-              // Eerste keer: schrijf huidige lokale taken naar Firestore
               setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : `Cloud (${user.email || "Google"})`);
             }
           },
@@ -506,7 +499,6 @@
             if (t.id !== taskId) return t;
 
             if (t.status === "done") {
-              // Terugzetten naar to do en laatste voltooiing verwijderen indien van vandaag/afgerond
               const nextCompletions = Array.isArray(t.completions) ? t.completions.slice(0, -1) : [];
               return {
                 ...t,
@@ -516,7 +508,6 @@
               };
             }
 
-            // Afronden
             const prevCompletions = Array.isArray(t.completions) ? t.completions : [];
             const nextCompletions = [
               ...prevCompletions,
@@ -647,10 +638,8 @@
         e.target.value = "";
       }
 
-      // 7-daagse strip vanaf selectedDate
       const weekDays = useMemo(() => {
         const base = parseDateStr(selectedDate) || new Date();
-        // Start op maandag van de huidige week of geselecteerde datum
         const list = [];
         for (let i = -1; i <= 5; i++) {
           const d = new Date(base);
@@ -687,7 +676,6 @@
           if (t.status === "done" && (t.targetDate === selectedDate || (!t.targetDate && selectedDate === todayStr))) {
             return true;
           }
-          // Ook terugkerende taken die op deze dag zijn voltooid tonen onder 'Afgerond op deze dag'
           if (Array.isArray(t.completions)) {
             return t.completions.some((c) => {
               const cDate = c.completedAt ? toDateStr(new Date(c.completedAt)) : c.scheduledDate;
@@ -710,7 +698,6 @@
         return Array.from({ length: 7 }, (_, idx) => addDaysStr(todayStr, idx));
       }, [todayStr]);
 
-      // Logboek gegroepeerd op datum van voltooiing
       const logbookEntriesByDate = useMemo(() => {
         const entries = [];
         for (const t of filteredTasks) {
@@ -930,7 +917,6 @@
 
       return (
         <div className="min-h-screen pb-24">
-          {/* Bovenbalk */}
           <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
             <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-3">
@@ -948,7 +934,6 @@
                 </div>
               </div>
 
-              {/* Weergave-schakelaars */}
               <nav className="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800">
                 {[
                   { id: "split", label: "Beide" },
@@ -971,7 +956,6 @@
                 ))}
               </nav>
 
-              {/* Acties rechtsboven */}
               <div className="flex items-center gap-2">
                 {user && !user.isAnonymous ? (
                   <button
@@ -1037,7 +1021,6 @@
           )}
 
           <main className="mx-auto max-w-7xl px-4 pt-5">
-            {/* Nieuwe taak toevoegen */}
             <form
               onSubmit={handleAddTask}
               className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
@@ -1134,4 +1117,621 @@
                         <select
                           value={newRecMode}
                           onChange={(e) => setNewRecMode(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        >
+                          <option value="from_completion">Vanaf afronddatum</option>
+                          <option value="from_due">Vaste cadans vanaf geplande datum</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  <div className={newRecType === "none" ? "sm:col-span-2" : "sm:col-span-3"}>
+                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                      Notitie (optioneel)
+                    </label>
+                    <input
+                      type="text"
+                      value={newNotes}
+                      onChange={(e) => setNewNotes(e.target.value)}
+                      placeholder="Korte toelichting of sub-punten..."
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <div className="flex items-center gap-2">
+                  <span>Zoeken:</span>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filter op titel of notitie..."
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="text-indigo-600 hover:underline dark:text-indigo-400"
+                    >
+                      Wissen
+                    </button>
+                  )}
+                </div>
+                <span>Tip: sleep taken op een dag in de weekstrip of op de backlog.</span>
+              </div>
+            </form>
+
+            {viewMode === "logbook" && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <h2 className="text-lg font-bold">Logboek — Voltooide taken</h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Chronologisch overzicht van wanneer taken zijn afgerond, inclusief herhaalde taken.
+                </p>
+
+                {logbookEntriesByDate.length === 0 ? (
+                  <p className="mt-6 rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
+                    Nog geen afgeronde taken geregistreerd.
+                  </p>
+                ) : (
+                  <div className="mt-5 space-y-6">
+                    {logbookEntriesByDate.map(([dtStr, items]) => (
+                      <div key={dtStr}>
+                        <h3 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          {formatFullDutchDate(dtStr)} ({dtStr})
+                        </h3>
+                        <div className="space-y-2">
+                          {items.map((item) => (
+                            <div
+                              key={item.key}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-950/60"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                  ✓
+                                </span>
+                                <span className="font-medium">{item.title}</span>
+                                {item.isRecurring && (
+                                  <span className="rounded-md bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+                                    Terugkerend
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                {item.completedAt ? `Om ${formatTimeOnlyNL(item.completedAt)}` : ""}
+                                {item.isRecurring && item.nextDue
+                                  ? ` • Volgende beurt: ${formatDutchDate(item.nextDue, todayStr)}`
+                                  : ""}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {viewMode !== "logbook" && (
+              <div
+                className={`grid gap-6 ${
+                  viewMode === "split" ? "lg:grid-cols-12" : "grid-cols-1"
+                }`}
+              >
+                {(viewMode === "split" || viewMode === "day") && (
+                  <section
+                    className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 ${
+                      viewMode === "split" ? "lg:col-span-7" : ""
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-lg font-bold">Dagplanning</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {formatFullDutchDate(selectedDate)}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDate(todayStr)}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                        >
+                          Vandaag
+                        </button>
+                        <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs dark:bg-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => setDayLayout("focus")}
+                            className={`rounded-md px-2.5 py-1 ${
+                              dayLayout === "focus"
+                                ? "bg-white font-semibold text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
+                                : "text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            Dagfocus
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDayLayout("agenda")}
+                            className={`rounded-md px-2.5 py-1 ${
+                              dayLayout === "agenda"
+                                ? "bg-white font-semibold text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
+                                : "text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            Per dag onder elkaar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {overdueTasks.length > 0 && (
+                      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 dark:border-amber-900/70 dark:bg-amber-950/30">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                            Verlopen taken ({overdueTasks.length})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateTasks((prev) =>
+                                prev.map((t) =>
+                                  t.status === "todo" && t.targetDate && t.targetDate < todayStr
+                                    ? { ...t, targetDate: todayStr }
+                                    : t
+                                )
+                              );
+                              showToast("Alle verlopen taken naar vandaag verplaatst");
+                            }}
+                            className="rounded-lg bg-amber-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-700"
+                          >
+                            Alles naar vandaag
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {overdueTasks.map((t) => renderTaskCard(t, { showScheduleActions: true }))}
+                        </div>
+                      </div>
+                    )}
+
+                    {dayLayout === "focus" ? (
+                      <>
+                        <div className="mt-4 grid grid-cols-7 gap-1.5">
+                          {weekDays.map((dStr) => {
+                            const isSelected = dStr === selectedDate;
+                            const isToday = dStr === todayStr;
+                            const count = tasks.filter(
+                              (t) => t.status === "todo" && t.targetDate === dStr
+                            ).length;
+                            const dObj = parseDateStr(dStr);
+                            const wd = dObj
+                              ? dObj.toLocaleDateString("nl-NL", { weekday: "short" })
+                              : "";
+
+                            return (
+                              <button
+                                key={dStr}
+                                type="button"
+                                onClick={() => setSelectedDate(dStr)}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  setDragOverTarget(dStr);
+                                }}
+                                onDragLeave={() => setDragOverTarget(null)}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  setDragOverTarget(null);
+                                  if (draggedTaskId) {
+                                    handleSetTargetDate(draggedTaskId, dStr);
+                                    setDraggedTaskId(null);
+                                  }
+                                }}
+                                className={`flex flex-col items-center rounded-xl border p-2 text-center transition ${
+                                  isSelected
+                                    ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+                                    : dragOverTarget === dStr
+                                    ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950/50"
+                                    : "border-slate-200 bg-slate-50/70 hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-950/50"
+                                }`}
+                              >
+                                <span className="text-[11px] uppercase opacity-80">{wd}</span>
+                                <span className="mt-0.5 text-sm font-bold">
+                                  {dObj ? dObj.getDate() : dStr}
+                                </span>
+                                <span
+                                  className={`mt-1 rounded-full px-1.5 text-[10px] font-medium ${
+                                    isSelected
+                                      ? "bg-white/20 text-white"
+                                      : count > 0
+                                      ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                      : "text-slate-400"
+                                  }`}
+                                >
+                                  {count}
+                                </span>
+                                {isToday && !isSelected && (
+                                  <span className="mt-0.5 h-1 w-1 rounded-full bg-indigo-500" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-5 space-y-2.5">
+                          {selectedDateTodoTasks.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
+                              Geen openstaande taken gepland voor {formatDutchDate(selectedDate, todayStr).toLowerCase()}.
+                            </div>
+                          ) : (
+                            selectedDateTodoTasks.map((t) =>
+                              renderTaskCard(t, { showScheduleActions: true })
+                            )
+                          )}
+                        </div>
+
+                        <div className="mt-6 border-t border-slate-100 pt-4 dark:border-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => setShowDoneInDay((v) => !v)}
+                            className="flex w-full items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                          >
+                            <span>Afgerond op deze dag ({selectedDateDoneTasks.length})</span>
+                            <span>{showDoneInDay ? "Verberg ▲" : "Toon ▼"}</span>
+                          </button>
+                          {showDoneInDay && selectedDateDoneTasks.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {selectedDateDoneTasks.map((t) =>
+                                renderTaskCard(t, { isCompletedEntry: true })
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-4 space-y-5">
+                        {upcomingDaysList.map((dStr) => {
+                          const dayItems = filteredTasks.filter(
+                            (t) => t.status === "todo" && t.targetDate === dStr
+                          );
+                          return (
+                            <div
+                              key={dStr}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                setDragOverTarget(dStr);
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                setDragOverTarget(null);
+                                if (draggedTaskId) {
+                                  handleSetTargetDate(draggedTaskId, dStr);
+                                  setDraggedTaskId(null);
+                                }
+                              }}
+                              className={`rounded-xl border p-3.5 ${
+                                dragOverTarget === dStr
+                                  ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30"
+                                  : "border-slate-200/80 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-950/40"
+                              }`}
+                            >
+                              <div className="mb-2.5 flex items-center justify-between">
+                                <h3 className="text-sm font-bold">
+                                  {formatDutchDate(dStr, todayStr)}{" "}
+                                  <span className="font-normal text-xs text-slate-500">
+                                    ({dStr})
+                                  </span>
+                                </h3>
+                                <span className="text-xs text-slate-500">{dayItems.length} taken</span>
+                              </div>
+                              {dayItems.length === 0 ? (
+                                <p className="text-xs text-slate-400">Geen taken gepland.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {dayItems.map((t) =>
+                                    renderTaskCard(t, { showScheduleActions: true })
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                {(viewMode === "split" || viewMode === "backlog") && (
+                  <section
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverTarget("backlog");
+                    }}
+                    onDragLeave={() => setDragOverTarget(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOverTarget(null);
+                      if (draggedTaskId) {
+                        handleSetTargetDate(draggedTaskId, null);
+                        setDraggedTaskId(null);
+                      }
+                    }}
+                    className={`rounded-2xl border p-5 shadow-sm transition ${
+                      dragOverTarget === "backlog"
+                        ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30"
+                        : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+                    } ${viewMode === "split" ? "lg:col-span-5" : ""}`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h2 className="text-lg font-bold">Backlog</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Nog niet gepland werk ({backlogTasks.length})
+                        </p>
+                      </div>
+
+                      <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs dark:bg-slate-800">
+                        {[
+                          { id: "all", label: "Alles" },
+                          { id: "recurring", label: "Terugkerend" },
+                          { id: "notes", label: "Met notitie" }
+                        ].map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setBacklogFilter(f.id)}
+                            className={`rounded-md px-2.5 py-1 ${
+                              backlogFilter === f.id
+                                ? "bg-white font-semibold text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
+                                : "text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-2.5">
+                      {backlogTasks.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
+                          Geen taken in de backlog voor dit filter.
+                        </div>
+                      ) : (
+                        backlogTasks.map((t) => renderTaskCard(t, { showScheduleActions: true }))
+                      )}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
+          </main>
+
+          {editingTask && (
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+              <form
+                onSubmit={handleSaveEdit}
+                className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+              >
+                <h3 className="text-base font-bold">Taak bewerken</h3>
+
+                <div className="mt-4 space-y-3.5">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                      Titel
+                    </label>
+                    <input
+                      type="text"
+                      value={editingTask.title}
+                      onChange={(e) =>
+                        setEditingTask({ ...editingTask, title: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Target date (leeg = backlog)
+                      </label>
+                      <input
+                        type="date"
+                        value={editingTask.targetDate || ""}
+                        onChange={(e) =>
+                          setEditingTask({
+                            ...editingTask,
+                            targetDate: e.target.value || null
+                          })
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Status
+                      </label>
+                      <select
+                        value={editingTask.status || "todo"}
+                        onChange={(e) =>
+                          setEditingTask({ ...editingTask, status: e.target.value })
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        <option value="todo">To do</option>
+                        <option value="done">Done</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Herhaling
+                      </label>
+                      <select
+                        value={editingTask.recurrence?.type || "none"}
+                        onChange={(e) =>
+                          setEditingTask({
+                            ...editingTask,
+                            recurrence: {
+                              ...(editingTask.recurrence || {
+                                interval: 1,
+                                unit: "days",
+                                mode: "from_completion"
+                              }),
+                              type: e.target.value
+                            }
+                          })
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        <option value="none">Niet herhalend</option>
+                        <option value="daily">Dagelijks</option>
+                        <option value="weekdays">Werkdagen (ma–vr)</option>
+                        <option value="weekly">Wekelijks</option>
+                        <option value="biweekly">Elke 2 weken</option>
+                        <option value="monthly">Maandelijks</option>
+                        <option value="custom">Aangepast interval...</option>
+                      </select>
+                    </div>
+
+                    {editingTask.recurrence?.type && editingTask.recurrence.type !== "none" && (
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                          Nieuwe datum berekenen
+                        </label>
+                        <select
+                          value={editingTask.recurrence?.mode || "from_completion"}
+                          onChange={(e) =>
+                            setEditingTask({
+                              ...editingTask,
+                              recurrence: {
+                                ...editingTask.recurrence,
+                                mode: e.target.value
+                              }
+                            })
+                          }
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        >
+                          <option value="from_completion">Vanaf afronddatum</option>
+                          <option value="from_due">Vaste cadans vanaf geplande datum</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {editingTask.recurrence?.type === "custom" && (
+                    <div className="flex gap-2">
+                      <div className="w-24">
+                        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                          Elke
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={editingTask.recurrence?.interval || 1}
+                          onChange={(e) =>
+                            setEditingTask({
+                              ...editingTask,
+                              recurrence: {
+                                ...editingTask.recurrence,
+                                interval: Math.max(1, Number(e.target.value) || 1)
+                              }
+                            })
+                          }
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                          Eenheid
+                        </label>
+                        <select
+                          value={editingTask.recurrence?.unit || "days"}
+                          onChange={(e) =>
+                            setEditingTask({
+                              ...editingTask,
+                              recurrence: {
+                                ...editingTask.recurrence,
+                                unit: e.target.value
+                              }
+                            })
+                          }
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        >
+                          <option value="days">Dagen</option>
+                          <option value="weeks">Weken</option>
+                          <option value="months">Maanden</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                      Notitie
+                    </label>
+                    <textarea
+                      rows="3"
+                      value={editingTask.notes || ""}
+                      onChange={(e) =>
+                        setEditingTask({ ...editingTask, notes: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTask(null)}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                  >
+                    Opslaan
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {toast && (
+            <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-medium text-white shadow-lg dark:bg-slate-100 dark:text-slate-900">
+              <span>{toast.message}</span>
+              {toast.undoFn && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast.undoFn();
+                    setToast(null);
+                  }}
+                  className="underline font-bold"
+                >
+                  Ongedaan maken
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
