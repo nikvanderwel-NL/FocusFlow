@@ -987,6 +987,8 @@
       const [showDoneInDay, setShowDoneInDay] = useState(true);
       const [backlogFilter, setBacklogFilter] = useState("all");
       const [searchQuery, setSearchQuery] = useState("");
+      const [allTasksSearch, setAllTasksSearch] = useState("");
+      const [showCompletedInAllTasks, setShowCompletedInAllTasks] = useState(true);
       const [menuOpen, setMenuOpen] = useState(false);
       // State voor de feedback-pop-up die overal via Ctrl+Shift+F / Cmd+Shift+F geopend kan worden
       const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -1765,6 +1767,32 @@
         );
       }, [projectTasks, searchQuery]);
 
+      const allTasksMatched = useMemo(() => {
+        const q = allTasksSearch.trim().toLowerCase();
+        if (!q) return projectTasks;
+        return projectTasks.filter(
+          (t) =>
+            t.title.toLowerCase().includes(q) ||
+            (t.notes && t.notes.toLowerCase().includes(q)) ||
+            (t.dailyNote && t.dailyNote.toLowerCase().includes(q))
+        );
+      }, [projectTasks, allTasksSearch]);
+
+      const allTasksOpen = useMemo(
+        () => allTasksMatched.filter((t) => t.status !== "done"),
+        [allTasksMatched]
+      );
+
+      const allTasksCompleted = useMemo(
+        () =>
+          allTasksMatched.filter(
+            (t) =>
+              t.status === "done" ||
+              (Array.isArray(t.completions) && t.completions.length > 0)
+          ),
+        [allTasksMatched]
+      );
+
       const overdueTasks = useMemo(() => {
         return filteredTasks.filter(
           (t) => t.status === "todo" && t.targetDate && t.targetDate < todayStr
@@ -2478,7 +2506,8 @@
                       { id: "day", label: "Per Dag" },
                       { id: "daily", label: `Daily (${dailyMarkedTasks.length})` },
                       { id: "backlog", label: `Backlog (${backlogTasks.length})` },
-                      { id: "overdue", label: `Overdue (${overdueTasks.length})` }
+                      { id: "overdue", label: `Overdue (${overdueTasks.length})` },
+                      { id: "all_tasks", label: `Alle taken (${projectTasks.length})` }
                     ].map((tab) => (
                       <button
                         key={tab.id}
@@ -2700,6 +2729,90 @@
               </div>
             </form>
 
+            {viewMode === "all_tasks" && (
+              <section className="space-y-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold">Alle taken ({allTasksMatched.length})</h2>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Zoek in zowel de taaktitel als de notities en bekijk openstaande én voltooide taken.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative flex-1 sm:w-72">
+                        <input
+                          type="text"
+                          value={allTasksSearch}
+                          onChange={(e) => setAllTasksSearch(e.target.value)}
+                          placeholder="Zoek in titel en notities..."
+                          aria-label="Zoek in titel en notities"
+                          className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs text-slate-900 outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100`}
+                        />
+                      </div>
+                      {allTasksSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setAllTasksSearch("")}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        >
+                          Wissen
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Openstaande taken ({allTasksOpen.length})
+                      </h3>
+                    </div>
+
+                    {allTasksOpen.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
+                        {allTasksSearch
+                          ? `Geen openstaande taken gevonden voor "${allTasksSearch}".`
+                          : "Geen openstaande taken in dit project."}
+                      </p>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {allTasksOpen.map((t) => renderTaskCard(t, { showScheduleActions: true }))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setShowCompletedInAllTasks((v) => !v)}
+                      className="flex w-full items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                    >
+                      <span>Voltooide taken ({allTasksCompleted.length})</span>
+                      <span>{showCompletedInAllTasks ? "Verberg ▲" : "Toon ▼"}</span>
+                    </button>
+
+                    {showCompletedInAllTasks && (
+                      <div className="mt-3 space-y-2.5">
+                        {allTasksCompleted.length === 0 ? (
+                          <p className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500 dark:border-slate-800">
+                            {allTasksSearch
+                              ? `Geen voltooide taken gevonden voor "${allTasksSearch}".`
+                              : "Nog geen voltooide taken."}
+                          </p>
+                        ) : (
+                          allTasksCompleted.map((t) =>
+                            renderTaskCard(t, { isCompletedEntry: t.status === "done" })
+                          )
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
             {viewMode === "daily" && (
               <section className="space-y-6">
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -2845,7 +2958,7 @@
               </section>
             )}
 
-            {!["daily", "overdue", "logbook"].includes(viewMode) && (
+            {!["all_tasks", "daily", "overdue", "logbook"].includes(viewMode) && (
               <div
                 className={`grid gap-6 ${
                   viewMode === "split" ? "lg:grid-cols-12" : "grid-cols-1"
