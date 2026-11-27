@@ -139,11 +139,25 @@
     const LOCAL_STORAGE_KEY = "focusflow_tasks_v3";
     const THEME_STORAGE_KEY = "focusflow_theme_v1";
     const FEEDBACK_STORAGE_KEY = "focusflow_feedback_v1";
+    const INVOICES_STORAGE_KEY = "focusflow_invoices_v1";
 
     const PROJECTS = [
       { id: "werk", label: "Werk", color: "blue" },
       { id: "verburch", label: "Verburch", color: "orange" },
       { id: "persoonlijk", label: "Persoonlijk", color: "emerald" }
+    ];
+
+    const INVOICE_STATUSES = [
+      { id: "concept", label: "Concept" },
+      { id: "verzonden", label: "Verzonden" },
+      { id: "betaald", label: "Betaald" },
+      { id: "achterstallig", label: "Achterstallig" }
+    ];
+
+    const BARDIENST_STATUSES = [
+      { id: "open", label: "Open" },
+      { id: "nvt", label: "NVT" },
+      { id: "uitbetaald", label: "Uitbetaald" }
     ];
 
     // Accentkleuren gekoppeld aan het gekozen project; 'all' behoudt het paarse accent
@@ -362,6 +376,76 @@
       }
       document.body.removeChild(temp);
       return copied;
+    }
+
+    function formatEuro(amount) {
+      const num = Number(amount);
+      const safe = Number.isFinite(num) ? num : 0;
+      return safe.toLocaleString("nl-NL", {
+        style: "currency",
+        currency: "EUR"
+      });
+    }
+
+    function computeInvoiceTotal(lines) {
+      if (!Array.isArray(lines)) return 0;
+      return lines.reduce((sum, line) => {
+        const val = Number(line?.totalPrice);
+        return sum + (Number.isFinite(val) ? val : 0);
+      }, 0);
+    }
+
+    function getInvoiceStatusBadge(status) {
+      if (status === "betaald") {
+        return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300";
+      }
+      if (status === "verzonden") {
+        return "bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300";
+      }
+      if (status === "achterstallig") {
+        return "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300";
+      }
+      return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+    }
+
+    function getInvoiceStatusLabel(status) {
+      return INVOICE_STATUSES.find((s) => s.id === status)?.label || "Concept";
+    }
+
+    // Bardienst-statussen: 'nvt' en 'uitbetaald' zijn compleet en altijd groen
+    function getBardienstBadge(status) {
+      if (status === "nvt" || status === "uitbetaald") {
+        return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300";
+      }
+      return "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300";
+    }
+
+    function getBardienstLabel(status) {
+      return BARDIENST_STATUSES.find((s) => s.id === status)?.label || "Open";
+    }
+
+    function createEmptyInvoiceLine() {
+      return {
+        id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        subject: "",
+        quantity: 1,
+        totalPrice: 0
+      };
+    }
+
+    function createBlankInvoice(todayStr) {
+      return {
+        id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        number: "",
+        client: "",
+        invoiceDate: todayStr,
+        dueDate: addDaysStr(todayStr, 14),
+        status: "concept",
+        bardienstStatus: "open",
+        lines: [createEmptyInvoiceLine()],
+        notes: "",
+        createdAt: new Date().toISOString()
+      };
     }
 
     function getProjectBadgeClasses(projectId) {
@@ -935,6 +1019,34 @@
       }
     ];
 
+    const INITIAL_INVOICES = [
+      {
+        id: "inv-1",
+        number: "VB-2026-001",
+        client: "Toernooi / Evenement Verburch",
+        invoiceDate: toDateStr(),
+        dueDate: addDaysStr(toDateStr(), 14),
+        status: "verzonden",
+        bardienstStatus: "open",
+        lines: [
+          {
+            id: "l-1",
+            subject: "Zaalhuur & barafname weekend",
+            quantity: 1,
+            totalPrice: 450
+          },
+          {
+            id: "l-2",
+            subject: "Bardienst vergoeding",
+            quantity: 6,
+            totalPrice: 120
+          }
+        ],
+        notes: "Bardienst nog uitbetalen aan vrijwilligers.",
+        createdAt: new Date().toISOString()
+      }
+    ];
+
     function App() {
       const [tasks, setTasks] = useState(() => {
         try {
@@ -952,6 +1064,17 @@
           }
         } catch (e) {}
         return INITIAL_TASKS;
+      });
+
+      const [invoices, setInvoices] = useState(() => {
+        try {
+          const saved = localStorage.getItem(INVOICES_STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) return parsed;
+          }
+        } catch (e) {}
+        return INITIAL_INVOICES;
       });
 
       const [feedbackItems, setFeedbackItems] = useState(() => {
@@ -989,6 +1112,8 @@
       const [searchQuery, setSearchQuery] = useState("");
       const [allTasksSearch, setAllTasksSearch] = useState("");
       const [showCompletedInAllTasks, setShowCompletedInAllTasks] = useState(true);
+      const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
+      const [editingInvoice, setEditingInvoice] = useState(null);
       const [menuOpen, setMenuOpen] = useState(false);
       // State voor de feedback-pop-up die overal via Ctrl+Shift+F / Cmd+Shift+F geopend kan worden
       const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -1021,6 +1146,7 @@
       const [syncError, setSyncError] = useState("");
       const skipNextCloudWriteRef = useRef(false);
       const skipNextCloudFeedbackRef = useRef(false);
+      const skipNextCloudInvoicesRef = useRef(false);
       const fileInputRef = useRef(null);
       const menuRef = useRef(null);
       const editFormRef = useRef(null);
@@ -1028,6 +1154,13 @@
 
       const todayStr = toDateStr();
       const accent = useMemo(() => getAccentClasses(activeProject), [activeProject]);
+
+      // Facturen zijn alleen relevant voor het project Verburch
+      useEffect(() => {
+        if (activeProject !== "verburch" && viewMode === "invoices") {
+          setViewMode("split");
+        }
+      }, [activeProject, viewMode]);
 
       // Sluit pop-ups zonder op te slaan
       const closeFeedbackModalWithoutSave = useCallback(() => {
@@ -1046,9 +1179,17 @@
         setEditingTask(null);
       }, []);
 
+      const closeInvoiceModalWithoutSave = useCallback(() => {
+        setEditingInvoice(null);
+      }, []);
+
       // Escape sluit eerst actieve inline feedbackbewerking, anders de bovenliggende open pop-up zonder op te slaan
       useEffect(() => {
-        const hasOpenModal = feedbackModalOpen || feedbackListModalOpen || Boolean(editingTask);
+        const hasOpenModal =
+          feedbackModalOpen ||
+          feedbackListModalOpen ||
+          Boolean(editingTask) ||
+          Boolean(editingInvoice);
         if (!hasOpenModal) return;
 
         function handleModalEscape(e) {
@@ -1065,6 +1206,8 @@
             } else {
               closeFeedbackListModalWithoutSave();
             }
+          } else if (editingInvoice) {
+            closeInvoiceModalWithoutSave();
           } else if (editingTask) {
             closeEditModalWithoutSave();
           }
@@ -1076,9 +1219,11 @@
         feedbackModalOpen,
         feedbackListModalOpen,
         editingTask,
+        editingInvoice,
         editingFeedbackId,
         closeFeedbackModalWithoutSave,
         closeFeedbackListModalWithoutSave,
+        closeInvoiceModalWithoutSave,
         closeEditModalWithoutSave
       ]);
 
@@ -1130,6 +1275,12 @@
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
         } catch (e) {}
       }, [tasks]);
+
+      useEffect(() => {
+        try {
+          localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(invoices));
+        } catch (e) {}
+      }, [invoices]);
 
       useEffect(() => {
         try {
@@ -1215,6 +1366,10 @@
                 skipNextCloudFeedbackRef.current = true;
                 setFeedbackItems(data.feedback);
               }
+              if (Array.isArray(data.invoices)) {
+                skipNextCloudInvoicesRef.current = true;
+                setInvoices(data.invoices);
+              }
               setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
             } else {
               setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
@@ -1230,7 +1385,7 @@
         return () => unsub();
       }, [fbReady, user]);
 
-      async function saveTasksToCloud(nextTasks, nextFeedback = null) {
+      async function saveTasksToCloud(nextTasks, nextFeedback = null, nextInvoices = null) {
         if (!fbReady || !window.FocusFlowFirebase || !user) return;
         const { db, doc, setDoc } = window.FocusFlowFirebase;
         try {
@@ -1244,6 +1399,9 @@
           if (Array.isArray(nextFeedback)) {
             payload.feedback = nextFeedback;
           }
+          if (Array.isArray(nextInvoices)) {
+            payload.invoices = nextInvoices;
+          }
           await setDoc(userDocRef, payload, { merge: true });
           setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
           setSyncError("");
@@ -1252,6 +1410,80 @@
           setSyncStatus("Fout bij opslaan");
           setSyncError(err.message || "Kon niet opslaan in Firestore.");
         }
+      }
+
+      function updateInvoicesState(updater) {
+        setInvoices((prev) => {
+          const next = typeof updater === "function" ? updater(prev) : updater;
+          try {
+            localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(next));
+          } catch (e) {}
+          if (skipNextCloudInvoicesRef.current) {
+            skipNextCloudInvoicesRef.current = false;
+          } else {
+            saveTasksToCloud(tasks, null, next);
+          }
+          return next;
+        });
+      }
+
+      function handleSaveInvoice(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (!editingInvoice) return;
+
+        const cleanLines = (editingInvoice.lines || []).map((l) => ({
+          id: l.id || `line-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+          subject: (l.subject || "").trim(),
+          quantity: Math.max(0, Number(l.quantity) || 0),
+          totalPrice: Math.max(0, Number(l.totalPrice) || 0)
+        }));
+
+        const normalizedInvoice = {
+          ...editingInvoice,
+          number: (editingInvoice.number || "").trim(),
+          client: (editingInvoice.client || "").trim(),
+          invoiceDate: editingInvoice.invoiceDate || todayStr,
+          dueDate: editingInvoice.dueDate || null,
+          status: editingInvoice.status || "concept",
+          bardienstStatus: editingInvoice.bardienstStatus || "open",
+          lines: cleanLines,
+          notes: (editingInvoice.notes || "").trim()
+        };
+
+        updateInvoicesState((prev) => {
+          const exists = prev.some((inv) => inv.id === normalizedInvoice.id);
+          if (exists) {
+            return prev.map((inv) => (inv.id === normalizedInvoice.id ? normalizedInvoice : inv));
+          }
+          return [normalizedInvoice, ...prev];
+        });
+
+        setEditingInvoice(null);
+        showToast("Factuur opgeslagen");
+      }
+
+      function handleDeleteInvoice(invoiceId) {
+        updateInvoicesState((prev) => prev.filter((inv) => inv.id !== invoiceId));
+        if (editingInvoice?.id === invoiceId) {
+          setEditingInvoice(null);
+        }
+        showToast("Factuur verwijderd");
+      }
+
+      function handleQuickBardienstChange(invoiceId, nextBardienstStatus) {
+        updateInvoicesState((prev) =>
+          prev.map((inv) =>
+            inv.id === invoiceId ? { ...inv, bardienstStatus: nextBardienstStatus } : inv
+          )
+        );
+        showToast(`Bardienststatus gezet op ${getBardienstLabel(nextBardienstStatus)}`);
+      }
+
+      function handleQuickInvoiceStatusChange(invoiceId, nextStatus) {
+        updateInvoicesState((prev) =>
+          prev.map((inv) => (inv.id === invoiceId ? { ...inv, status: nextStatus } : inv))
+        );
+        showToast(`Factuurstatus gezet op ${getInvoiceStatusLabel(nextStatus)}`);
       }
 
       function updateFeedbackState(updater) {
@@ -1836,6 +2068,21 @@
         });
       }, [filteredTasks, backlogFilter]);
 
+      const filteredInvoices = useMemo(() => {
+        if (invoiceStatusFilter === "all") return invoices;
+        return invoices.filter((inv) => (inv.status || "concept") === invoiceStatusFilter);
+      }, [invoices, invoiceStatusFilter]);
+
+      const openInvoiceAmount = useMemo(() => {
+        return invoices
+          .filter((inv) => inv.status !== "betaald")
+          .reduce((sum, inv) => sum + computeInvoiceTotal(inv.lines), 0);
+      }, [invoices]);
+
+      const openBardienstCount = useMemo(() => {
+        return invoices.filter((inv) => (inv.bardienstStatus || "open") === "open").length;
+      }, [invoices]);
+
       const upcomingDaysList = useMemo(() => {
         return Array.from({ length: 7 }, (_, idx) => addDaysStr(todayStr, idx));
       }, [todayStr]);
@@ -1858,7 +2105,7 @@
               });
             });
           } else if (t.status === "done") {
-            const dtStr = t.completedAt ? toDateStr(new Date(t.completedAt)) : t.targetDate || todayStr;
+            const dtStr = t.completedAt ? toDateStr(new Date(c.completedAt)) : t.targetDate || todayStr;
             entries.push({
               key: `${t.id}-done`,
               taskId: t.id,
@@ -1909,6 +2156,34 @@
         user && !user.isAnonymous
           ? user.displayName || user.email || "Google-account"
           : "Niet ingelogd met Google";
+
+      const navTabs = useMemo(() => {
+        const baseTabs = [
+          { id: "split", label: "Beide" },
+          { id: "day", label: "Per Dag" },
+          { id: "daily", label: `Daily (${dailyMarkedTasks.length})` },
+          { id: "backlog", label: `Backlog (${backlogTasks.length})` },
+          { id: "overdue", label: `Overdue (${overdueTasks.length})` },
+          { id: "all_tasks", label: `Alle taken (${projectTasks.length})` }
+        ];
+        if (activeProject === "verburch") {
+          return [
+            ...baseTabs,
+            {
+              id: "invoices",
+              label: `Facturen (${invoices.filter((inv) => inv.status !== "betaald").length})`
+            }
+          ];
+        }
+        return baseTabs;
+      }, [
+        activeProject,
+        dailyMarkedTasks.length,
+        backlogTasks.length,
+        overdueTasks.length,
+        projectTasks.length,
+        invoices
+      ]);
 
       function renderTaskCard(task, options = {}) {
         const { showScheduleActions = false, isCompletedEntry = false } = options;
@@ -2501,14 +2776,7 @@
                   </div>
 
                   <nav className="flex flex-wrap items-center rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800">
-                    {[
-                      { id: "split", label: "Beide" },
-                      { id: "day", label: "Per Dag" },
-                      { id: "daily", label: `Daily (${dailyMarkedTasks.length})` },
-                      { id: "backlog", label: `Backlog (${backlogTasks.length})` },
-                      { id: "overdue", label: `Overdue (${overdueTasks.length})` },
-                      { id: "all_tasks", label: `Alle taken (${projectTasks.length})` }
-                    ].map((tab) => (
+                    {navTabs.map((tab) => (
                       <button
                         key={tab.id}
                         type="button"
@@ -2555,179 +2823,406 @@
           )}
 
           <main className="mx-auto max-w-7xl px-4 pt-5">
-            <form
-              onSubmit={handleAddTask}
-              className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-            >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <input
-                  type="text"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder={
-                    activeProject === "all"
-                      ? "Nieuwe taak toevoegen..."
-                      : `Nieuwe taak in ${getProjectLabel(activeProject)}...`
-                  }
-                  className={`flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
-                />
-                {activeProject === "all" && (
-                  <select
-                    value={newProject}
-                    onChange={(e) => setNewProject(e.target.value)}
-                    aria-label="Project voor nieuwe taak"
-                    className={`rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
-                  >
-                    {PROJECTS.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <input
-                  type="date"
-                  value={newDate}
-                  onChange={(e) => setNewDate(e.target.value)}
-                  className={`rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewOptions((v) => !v)}
-                  className="rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  {showNewOptions ? "Minder opties ▲" : "Herhalen / Notitie / Daily ▼"}
-                </button>
-                <button
-                  type="submit"
-                  className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition ${accent.primaryBtn}`}
-                >
-                  Toevoegen
-                </button>
-              </div>
-
-              {showNewOptions && (
-                <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                      Herhaling
-                    </label>
-                    <select
-                      value={newRecType}
-                      onChange={(e) => setNewRecType(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                    >
-                      <option value="none">Niet herhalend</option>
-                      <option value="daily">Dagelijks</option>
-                      <option value="weekdays">Werkdagen (ma–vr)</option>
-                      <option value="weekly">Wekelijks</option>
-                      <option value="biweekly">Elke 2 weken</option>
-                      <option value="monthly">Maandelijks</option>
-                      <option value="custom">Aangepast interval...</option>
-                    </select>
-                  </div>
-
-                  {newRecType !== "none" && (
-                    <>
-                      {newRecType === "custom" ? (
-                        <div className="flex gap-2">
-                          <div className="w-24">
-                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                              Elke
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={newRecInterval}
-                              onChange={(e) => setNewRecInterval(e.target.value)}
-                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                              Eenheid
-                            </label>
-                            <select
-                              value={newRecUnit}
-                              onChange={(e) => setNewRecUnit(e.target.value)}
-                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                            >
-                              <option value="days">Dagen</option>
-                              <option value="weeks">Weken</option>
-                              <option value="months">Maanden</option>
-                            </select>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="hidden sm:block" />
-                      )}
-
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Nieuwe datum berekenen
-                        </label>
-                        <select
-                          value={newRecMode}
-                          onChange={(e) => setNewRecMode(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                        >
-                          <option value="from_completion">Vanaf afronddatum</option>
-                          <option value="from_due">Vaste cadans vanaf geplande datum</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
-
-                  <div className={newRecType === "none" ? "sm:col-span-2" : "sm:col-span-2"}>
-                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                      Notitie (optioneel)
-                    </label>
-                    <input
-                      type="text"
-                      value={newNotes}
-                      onChange={(e) => setNewNotes(e.target.value)}
-                      placeholder="Korte notitie (je kunt later in Bewerken markdown & plaatjes gebruiken)..."
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                    />
-                  </div>
-
-                  <div className="flex items-end">
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={newDaily}
-                        onChange={(e) => setNewDaily(e.target.checked)}
-                        className="rounded border-slate-300"
-                      />
-                      <span>Meenemen in Daily</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <div className="flex items-center gap-2">
-                  <span>Zoeken:</span>
+            {viewMode !== "invoices" && (
+              <form
+                onSubmit={handleAddTask}
+                className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <input
                     type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Filter op titel of notitie..."
-                    className={`rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder={
+                      activeProject === "all"
+                        ? "Nieuwe taak toevoegen..."
+                        : `Nieuwe taak in ${getProjectLabel(activeProject)}...`
+                    }
+                    className={`flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
                   />
-                  {searchQuery && (
+                  {activeProject === "all" && (
+                    <select
+                      value={newProject}
+                      onChange={(e) => setNewProject(e.target.value)}
+                      aria-label="Project voor nieuwe taak"
+                      className={`rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
+                    >
+                      {PROJECTS.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    type="date"
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                    className={`rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewOptions((v) => !v)}
+                    className="rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    {showNewOptions ? "Minder opties ▲" : "Herhalen / Notitie / Daily ▼"}
+                  </button>
+                  <button
+                    type="submit"
+                    className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition ${accent.primaryBtn}`}
+                  >
+                    Toevoegen
+                  </button>
+                </div>
+
+                {showNewOptions && (
+                  <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Herhaling
+                      </label>
+                      <select
+                        value={newRecType}
+                        onChange={(e) => setNewRecType(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        <option value="none">Niet herhalend</option>
+                        <option value="daily">Dagelijks</option>
+                        <option value="weekdays">Werkdagen (ma–vr)</option>
+                        <option value="weekly">Wekelijks</option>
+                        <option value="biweekly">Elke 2 weken</option>
+                        <option value="monthly">Maandelijks</option>
+                        <option value="custom">Aangepast interval...</option>
+                      </select>
+                    </div>
+
+                    {newRecType !== "none" && (
+                      <>
+                        {newRecType === "custom" ? (
+                          <div className="flex gap-2">
+                            <div className="w-24">
+                              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                                Elke
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={newRecInterval}
+                                onChange={(e) => setNewRecInterval(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                                Eenheid
+                              </label>
+                              <select
+                                value={newRecUnit}
+                                onChange={(e) => setNewRecUnit(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                              >
+                                <option value="days">Dagen</option>
+                                <option value="weeks">Weken</option>
+                                <option value="months">Maanden</option>
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="hidden sm:block" />
+                        )}
+
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                            Nieuwe datum berekenen
+                          </label>
+                          <select
+                            value={newRecMode}
+                            onChange={(e) => setNewRecMode(e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                          >
+                            <option value="from_completion">Vanaf afronddatum</option>
+                            <option value="from_due">Vaste cadans vanaf geplande datum</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    <div className={newRecType === "none" ? "sm:col-span-2" : "sm:col-span-2"}>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Notitie (optioneel)
+                      </label>
+                      <input
+                        type="text"
+                        value={newNotes}
+                        onChange={(e) => setNewNotes(e.target.value)}
+                        placeholder="Korte notitie (je kunt later in Bewerken markdown & plaatjes gebruiken)..."
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      />
+                    </div>
+
+                    <div className="flex items-end">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={newDaily}
+                          onChange={(e) => setNewDaily(e.target.checked)}
+                          className="rounded border-slate-300"
+                        />
+                        <span>Meenemen in Daily</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <span>Zoeken:</span>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Filter op titel of notitie..."
+                      className={`rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        className="underline font-medium"
+                      >
+                        Wissen
+                      </button>
+                    )}
+                  </div>
+                  <span>Tip: sleep taken op een dag in de weekstrip of op de backlog.</span>
+                </div>
+              </form>
+            )}
+
+            {viewMode === "invoices" && activeProject === "verburch" && (
+              <section className="space-y-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-bold">Facturen — Verburch</h2>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Beheer facturen, factuurregels en bardienstuitbetalingen (NVT en Uitbetaald zijn compleet).
+                      </p>
+                    </div>
+
                     <button
                       type="button"
-                      onClick={() => setSearchQuery("")}
-                      className="underline font-medium"
+                      onClick={() => setEditingInvoice(createBlankInvoice(todayStr))}
+                      className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
                     >
-                      Wissen
+                      + Nieuwe factuur
                     </button>
-                  )}
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-950/60">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        Openstaand factuurbedrag
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+                        {formatEuro(openInvoiceAmount)}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-950/60">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        Aantal facturen
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+                        {invoices.length}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-950/60">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        Bardienst open
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-amber-700 dark:text-amber-300">
+                        {openBardienstCount}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800 w-fit">
+                    {[
+                      { id: "all", label: `Alles (${invoices.length})` },
+                      ...INVOICE_STATUSES.map((st) => ({
+                        id: st.id,
+                        label: `${st.label} (${invoices.filter((i) => i.status === st.id).length})`
+                      }))
+                    ].map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setInvoiceStatusFilter(f.id)}
+                        className={`rounded-lg px-3 py-1.5 transition ${
+                          invoiceStatusFilter === f.id
+                            ? accent.activeTab
+                            : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {filteredInvoices.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
+                        Geen facturen gevonden voor dit filter.
+                      </p>
+                    ) : (
+                      filteredInvoices.map((inv) => {
+                        const invTotal = computeInvoiceTotal(inv.lines);
+                        const bardienstVal = inv.bardienstStatus || "open";
+                        return (
+                          <div
+                            key={inv.id}
+                            className={`rounded-xl border border-slate-200 bg-white p-4 transition ${accent.borderHover} dark:border-slate-800 dark:bg-slate-900`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                                    {inv.number || "Conceptfactuur"}
+                                  </span>
+                                  {inv.client && (
+                                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                                      • {inv.client}
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${getInvoiceStatusBadge(
+                                      inv.status
+                                    )}`}
+                                  >
+                                    {getInvoiceStatusLabel(inv.status)}
+                                  </span>
+                                  <span
+                                    className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${getBardienstBadge(
+                                      bardienstVal
+                                    )}`}
+                                  >
+                                    Bardienst: {getBardienstLabel(bardienstVal)}
+                                  </span>
+                                </div>
+
+                                <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                  {inv.invoiceDate && <span>Datum: {inv.invoiceDate}</span>}
+                                  {inv.dueDate && <span>Vervaldatum: {inv.dueDate}</span>}
+                                  <span>
+                                    {Array.isArray(inv.lines) ? inv.lines.length : 0}{" "}
+                                    {Array.isArray(inv.lines) && inv.lines.length === 1
+                                      ? "regel"
+                                      : "regels"}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="text-base font-bold text-slate-900 dark:text-slate-100">
+                                  {formatEuro(invTotal)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingInvoice(JSON.parse(JSON.stringify(inv)))}
+                                  aria-label="Factuur bewerken"
+                                  title="Factuur bewerken"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                >
+                                  <EditPencilIcon className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteInvoice(inv.id)}
+                                  aria-label="Factuur verwijderen"
+                                  title="Factuur verwijderen"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
+                                >
+                                  <DeleteTrashIcon className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {Array.isArray(inv.lines) && inv.lines.length > 0 && (
+                              <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-xs dark:border-slate-800 dark:bg-slate-950/50">
+                                <div className="space-y-1.5">
+                                  {inv.lines.map((line) => (
+                                    <div
+                                      key={line.id}
+                                      className="flex items-center justify-between gap-2 text-slate-700 dark:text-slate-300"
+                                    >
+                                      <span className="truncate">
+                                        {line.subject || "(Geen onderwerp)"}{" "}
+                                        <span className="text-slate-400">
+                                          × {Number(line.quantity) || 0}
+                                        </span>
+                                      </span>
+                                      <span className="font-semibold">
+                                        {formatEuro(line.totalPrice)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                                  <span>Status:</span>
+                                  <select
+                                    value={inv.status || "concept"}
+                                    onChange={(e) =>
+                                      handleQuickInvoiceStatusChange(inv.id, e.target.value)
+                                    }
+                                    className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                  >
+                                    {INVOICE_STATUSES.map((st) => (
+                                      <option key={st.id} value={st.id}>
+                                        {st.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+
+                                <label className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                                  <span>Bardienst:</span>
+                                  <select
+                                    value={bardienstVal}
+                                    onChange={(e) =>
+                                      handleQuickBardienstChange(inv.id, e.target.value)
+                                    }
+                                    className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                  >
+                                    {BARDIENST_STATUSES.map((bs) => (
+                                      <option key={bs.id} value={bs.id}>
+                                        {bs.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+
+                              {inv.notes && (
+                                <span className="text-slate-500 dark:text-slate-400">
+                                  {inv.notes}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-                <span>Tip: sleep taken op een dag in de weekstrip of op de backlog.</span>
-              </div>
-            </form>
+              </section>
+            )}
 
             {viewMode === "all_tasks" && (
               <section className="space-y-6">
@@ -2958,7 +3453,7 @@
               </section>
             )}
 
-            {!["all_tasks", "daily", "overdue", "logbook"].includes(viewMode) && (
+            {!["invoices", "all_tasks", "daily", "overdue", "logbook"].includes(viewMode) && (
               <div
                 className={`grid gap-6 ${
                   viewMode === "split" ? "lg:grid-cols-12" : "grid-cols-1"
@@ -3258,6 +3753,301 @@
               </div>
             )}
           </main>
+
+          {/* Pop-up: Factuur aanmaken / bewerken met factuurregels en bardienststatus */}
+          {editingInvoice && (
+            <div
+              onClick={closeInvoiceModalWithoutSave}
+              className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+            >
+              <form
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={handleSaveInvoice}
+                className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+                  <h3 className="text-base font-bold">
+                    {invoices.some((i) => i.id === editingInvoice.id)
+                      ? "Factuur bewerken"
+                      : "Nieuwe factuur"}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={closeInvoiceModalWithoutSave}
+                    className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Factuurnummer
+                      </label>
+                      <input
+                        type="text"
+                        value={editingInvoice.number || ""}
+                        onChange={(e) =>
+                          setEditingInvoice({ ...editingInvoice, number: e.target.value })
+                        }
+                        placeholder="Bijv. VB-2026-002"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Klant / Omschrijving
+                      </label>
+                      <input
+                        type="text"
+                        value={editingInvoice.client || ""}
+                        onChange={(e) =>
+                          setEditingInvoice({ ...editingInvoice, client: e.target.value })
+                        }
+                        placeholder="Bijv. Activiteit of organisatie"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Factuurdatum
+                      </label>
+                      <input
+                        type="date"
+                        value={editingInvoice.invoiceDate || ""}
+                        onChange={(e) =>
+                          setEditingInvoice({ ...editingInvoice, invoiceDate: e.target.value })
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Vervaldatum
+                      </label>
+                      <input
+                        type="date"
+                        value={editingInvoice.dueDate || ""}
+                        onChange={(e) =>
+                          setEditingInvoice({
+                            ...editingInvoice,
+                            dueDate: e.target.value || null
+                          })
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Factuurstatus
+                      </label>
+                      <select
+                        value={editingInvoice.status || "concept"}
+                        onChange={(e) =>
+                          setEditingInvoice({ ...editingInvoice, status: e.target.value })
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        {INVOICE_STATUSES.map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Bardienststatus (NVT &amp; Uitbetaald = compleet/groen)
+                      </label>
+                      <select
+                        value={editingInvoice.bardienstStatus || "open"}
+                        onChange={(e) =>
+                          setEditingInvoice({
+                            ...editingInvoice,
+                            bardienstStatus: e.target.value
+                          })
+                        }
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        {BARDIENST_STATUSES.map((bs) => (
+                          <option key={bs.id} value={bs.id}>
+                            {bs.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Factuurregels */}
+                  <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/50">
+                    <div className="mb-2.5 flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                        Factuurregels
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditingInvoice((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  lines: [...(prev.lines || []), createEmptyInvoiceLine()]
+                                }
+                              : null
+                          )
+                        }
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        + Regel toevoegen
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {(editingInvoice.lines || []).map((line, idx) => (
+                        <div
+                          key={line.id || idx}
+                          className="grid gap-2 sm:grid-cols-12 items-center"
+                        >
+                          <div className="sm:col-span-6">
+                            <label className="mb-1 block text-[11px] text-slate-500 dark:text-slate-400">
+                              Onderwerp
+                            </label>
+                            <input
+                              type="text"
+                              value={line.subject || ""}
+                              onChange={(e) => {
+                                const nextVal = e.target.value;
+                                setEditingInvoice((prev) => ({
+                                  ...prev,
+                                  lines: (prev.lines || []).map((l, i) =>
+                                    i === idx ? { ...l, subject: nextVal } : l
+                                  )
+                                }));
+                              }}
+                              placeholder="Onderwerp van de regel"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-[11px] text-slate-500 dark:text-slate-400">
+                              Aantal
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={line.quantity ?? 1}
+                              onChange={(e) => {
+                                const nextQty = e.target.value;
+                                setEditingInvoice((prev) => ({
+                                  ...prev,
+                                  lines: (prev.lines || []).map((l, i) =>
+                                    i === idx ? { ...l, quantity: nextQty } : l
+                                  )
+                                }));
+                              }}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-3">
+                            <label className="mb-1 block text-[11px] text-slate-500 dark:text-slate-400">
+                              Totaalprijs (€)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={line.totalPrice ?? 0}
+                              onChange={(e) => {
+                                const nextPrice = e.target.value;
+                                setEditingInvoice((prev) => ({
+                                  ...prev,
+                                  lines: (prev.lines || []).map((l, i) =>
+                                    i === idx ? { ...l, totalPrice: nextPrice } : l
+                                  )
+                                }));
+                              }}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+                            />
+                          </div>
+
+                          <div className="flex sm:col-span-1 sm:items-end justify-end pt-4 sm:pt-5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingInvoice((prev) => ({
+                                  ...prev,
+                                  lines: (prev.lines || []).filter((_, i) => i !== idx)
+                                }))
+                              }
+                              aria-label="Regel verwijderen"
+                              title="Regel verwijderen"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
+                            >
+                              <DeleteTrashIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between border-t border-slate-200/80 pt-3 text-xs dark:border-slate-800">
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">
+                        Berekend factuurtotaal
+                      </span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {formatEuro(computeInvoiceTotal(editingInvoice.lines))}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                      Opmerking / notitie (optioneel)
+                    </label>
+                    <input
+                      type="text"
+                      value={editingInvoice.notes || ""}
+                      onChange={(e) =>
+                        setEditingInvoice({ ...editingInvoice, notes: e.target.value })
+                      }
+                      placeholder="Bijv. betaalafspraak of bardienstdetails..."
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 px-6 py-4 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={closeInvoiceModalWithoutSave}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="submit"
+                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
+                  >
+                    Opslaan
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
 
           {/* Pop-up: Alle feedback inzien, toevoegen, bewerken, status bijhouden, archiveren en verwijderen */}
           {feedbackListModalOpen && (
