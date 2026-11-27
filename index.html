@@ -233,6 +233,137 @@
       );
     }
 
+    // Drie puntjes-icoon voor de menuknop
+    function MoreDotsIcon({ className = "h-4 w-4" }) {
+      return (
+        <svg
+          className={className}
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="5" r="2" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="12" cy="19" r="2" />
+        </svg>
+      );
+    }
+
+    // Zonnetje voor Daily: gevuld/geaccentueerd wanneer ingedrukt (actief), open lijn wanneer niet actief
+    function DailySunIcon({ active = false, className = "h-4 w-4" }) {
+      return (
+        <svg
+          className={className}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={active ? "2.2" : "1.8"}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="4.2" fill={active ? "currentColor" : "none"} />
+          <path d="M12 2.5v2.2M12 19.3v2.2M4.93 4.93l1.56 1.56M17.51 17.51l1.56 1.56M2.5 12h2.2M19.3 12h2.2M4.93 19.07l1.56-1.56M17.51 6.49l1.56-1.56" />
+        </svg>
+      );
+    }
+
+    // Vinkje voor markeren als verwerkt
+    function CheckDoneIcon({ className = "h-4 w-4" }) {
+      return (
+        <svg
+          className={className}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      );
+    }
+
+    // Kopieer-icoontje voor kopiëren van feedbacktekst
+    function CopyTextIcon({ className = "h-4 w-4" }) {
+      return (
+        <svg
+          className={className}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="9" y="9" width="11" height="11" rx="2" />
+          <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+        </svg>
+      );
+    }
+
+    // Potloodje voor bewerken
+    function EditPencilIcon({ className = "h-4 w-4" }) {
+      return (
+        <svg
+          className={className}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+          <path d="M19.5 7.125L16.875 4.5" />
+        </svg>
+      );
+    }
+
+    // Prullenbakje voor verwijderen
+    function DeleteTrashIcon({ className = "h-4 w-4" }) {
+      return (
+        <svg
+          className={className}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M4 7h16" />
+          <path d="M9.5 7V5a1.5 1.5 0 011.5-1.5h2A1.5 1.5 0 0114.5 5v2" />
+          <path d="M6.5 7l.8 11.5A2 2 0 009.3 20.3h5.4a2 2 0 002-1.8L17.5 7" />
+          <path d="M10 11v5M14 11v5" />
+        </svg>
+      );
+    }
+
+    function copyPlainTextToClipboard(text) {
+      if (!text) return false;
+      const temp = document.createElement("textarea");
+      temp.value = text;
+      temp.setAttribute("readonly", "");
+      temp.style.position = "absolute";
+      temp.style.left = "-9999px";
+      document.body.appendChild(temp);
+      temp.select();
+      let copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch (err) {
+        console.error("Kopiëren mislukt:", err);
+      }
+      document.body.removeChild(temp);
+      return copied;
+    }
+
     function getProjectBadgeClasses(projectId) {
       if (projectId === "werk") {
         return "bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300";
@@ -255,6 +386,14 @@
       const m = String(dateObj.getMonth() + 1).padStart(2, "0");
       const d = String(dateObj.getDate()).padStart(2, "0");
       return `${y}-${m}-${d}`;
+    }
+
+    function isFeedbackBeforeToday(item, todayStr) {
+      if (!item || !item.processed) return false;
+      if (!item.processedAt) return false;
+      const d = new Date(item.processedAt);
+      if (Number.isNaN(d.getTime())) return false;
+      return toDateStr(d) < todayStr;
     }
 
     function parseDateStr(str) {
@@ -826,6 +965,11 @@
         return [];
       });
 
+      const [feedbackTab, setFeedbackTab] = useState("active");
+      const [editingFeedbackId, setEditingFeedbackId] = useState(null);
+      const [editingFeedbackDraft, setEditingFeedbackDraft] = useState("");
+      const [copiedItemId, setCopiedItemId] = useState(null);
+
       const [undoStack, setUndoStack] = useState([]);
 
       const [darkMode, setDarkMode] = useState(() => {
@@ -891,13 +1035,16 @@
       const closeFeedbackListModalWithoutSave = useCallback(() => {
         setFeedbackListModalOpen(false);
         setFeedbackCopied(false);
+        setEditingFeedbackId(null);
+        setEditingFeedbackDraft("");
+        setCopiedItemId(null);
       }, []);
 
       const closeEditModalWithoutSave = useCallback(() => {
         setEditingTask(null);
       }, []);
 
-      // Escape sluit de bovenliggende open pop-up zonder op te slaan
+      // Escape sluit eerst actieve inline feedbackbewerking, anders de bovenliggende open pop-up zonder op te slaan
       useEffect(() => {
         const hasOpenModal = feedbackModalOpen || feedbackListModalOpen || Boolean(editingTask);
         if (!hasOpenModal) return;
@@ -910,7 +1057,12 @@
           if (feedbackModalOpen) {
             closeFeedbackModalWithoutSave();
           } else if (feedbackListModalOpen) {
-            closeFeedbackListModalWithoutSave();
+            if (editingFeedbackId !== null) {
+              setEditingFeedbackId(null);
+              setEditingFeedbackDraft("");
+            } else {
+              closeFeedbackListModalWithoutSave();
+            }
           } else if (editingTask) {
             closeEditModalWithoutSave();
           }
@@ -922,6 +1074,7 @@
         feedbackModalOpen,
         feedbackListModalOpen,
         editingTask,
+        editingFeedbackId,
         closeFeedbackModalWithoutSave,
         closeFeedbackListModalWithoutSave,
         closeEditModalWithoutSave
@@ -1144,7 +1297,49 @@
         if (!entry) return;
         updateFeedbackState((prev) => [entry, ...prev]);
         setListFeedbackDraft("");
+        setFeedbackTab("active");
         showToast("Feedback toegevoegd");
+      }
+
+      function handleStartEditFeedback(item) {
+        setEditingFeedbackId(item.id);
+        setEditingFeedbackDraft(item.text || "");
+      }
+
+      function handleCancelEditFeedback() {
+        setEditingFeedbackId(null);
+        setEditingFeedbackDraft("");
+      }
+
+      function handleSaveEditFeedback(id) {
+        const trimmed = editingFeedbackDraft.trim();
+        if (!trimmed) return;
+        updateFeedbackState((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  text: trimmed,
+                  updatedAt: new Date().toISOString()
+                }
+              : item
+          )
+        );
+        setEditingFeedbackId(null);
+        setEditingFeedbackDraft("");
+        showToast("Feedback bijgewerkt");
+      }
+
+      function handleCopySingleFeedback(item) {
+        if (!item || !item.text) return;
+        const ok = copyPlainTextToClipboard(item.text);
+        if (ok) {
+          setCopiedItemId(item.id);
+          setTimeout(() => {
+            setCopiedItemId((prev) => (prev === item.id ? null : prev));
+          }, 2000);
+          showToast("Feedbacktekst gekopieerd");
+        }
       }
 
       function handleToggleFeedbackProcessed(id) {
@@ -1163,6 +1358,10 @@
       }
 
       function handleDeleteFeedback(id) {
+        if (editingFeedbackId === id) {
+          setEditingFeedbackId(null);
+          setEditingFeedbackDraft("");
+        }
         updateFeedbackState((prev) => prev.filter((item) => item.id !== id));
       }
 
@@ -1182,21 +1381,10 @@
         ];
         const output = lines.join("\n");
 
-        const temp = document.createElement("textarea");
-        temp.value = output;
-        temp.setAttribute("readonly", "");
-        temp.style.position = "absolute";
-        temp.style.left = "-9999px";
-        document.body.appendChild(temp);
-        temp.select();
-        try {
-          document.execCommand("copy");
+        if (copyPlainTextToClipboard(output)) {
           setFeedbackCopied(true);
           setTimeout(() => setFeedbackCopied(false), 2500);
-        } catch (err) {
-          console.error("Kopiëren mislukt:", err);
         }
-        document.body.removeChild(temp);
       }
 
       function commitTasksChange(updater, actionLabel = "Wijziging") {
@@ -1671,6 +1859,19 @@
         return Array.from(grouped.entries());
       }, [filteredTasks, todayStr]);
 
+      const archivedFeedbackItems = useMemo(
+        () => feedbackItems.filter((f) => isFeedbackBeforeToday(f, todayStr)),
+        [feedbackItems, todayStr]
+      );
+
+      const currentFeedbackItems = useMemo(
+        () => feedbackItems.filter((f) => !isFeedbackBeforeToday(f, todayStr)),
+        [feedbackItems, todayStr]
+      );
+
+      const visibleFeedbackItems =
+        feedbackTab === "archive" ? archivedFeedbackItems : currentFeedbackItems;
+
       const openFeedbackCount = useMemo(
         () => feedbackItems.filter((f) => !f.processed).length,
         [feedbackItems]
@@ -1744,28 +1945,34 @@
                     <button
                       type="button"
                       onClick={() => handleToggleDaily(task.id)}
-                      title={isDaily ? "Uit Daily halen" : "Meenemen in Daily"}
-                      className={`rounded-lg px-2 py-1 text-xs font-medium transition ${
+                      aria-pressed={isDaily}
+                      aria-label={isDaily ? "Uit Daily halen" : "Meenemen in Daily"}
+                      title={isDaily ? "Uit Daily halen (actief in Daily)" : "Meenemen in Daily"}
+                      className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border transition ${
                         isDaily
-                          ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:hover:bg-amber-900/70"
-                          : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                          ? "border-amber-400/80 bg-amber-100 text-amber-600 shadow-inner ring-1 ring-amber-400/50 hover:bg-amber-200/80 dark:border-amber-600/70 dark:bg-amber-900/60 dark:text-amber-300 dark:hover:bg-amber-900/80"
+                          : "border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                       }`}
                     >
-                      {isDaily ? "Daily ★" : "Daily"}
+                      <DailySunIcon active={isDaily} className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditingTask(JSON.parse(JSON.stringify(task)))}
-                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                      aria-label="Bewerken"
+                      title="Bewerken"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                     >
-                      Bewerken
+                      <EditPencilIcon className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteTask(task.id)}
-                      className="rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
+                      aria-label="Verwijderen"
+                      title="Verwijderen"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
                     >
-                      Verwijderen
+                      <DeleteTrashIcon className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -1800,8 +2007,9 @@
                   )}
 
                   {isDaily && (
-                    <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
-                      Daily
+                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                      <DailySunIcon active className="h-3 w-3" />
+                      <span>Daily</span>
                     </span>
                   )}
 
@@ -1977,20 +2185,23 @@
                     <button
                       type="button"
                       onClick={() => handleToggleDaily(task.id)}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                      aria-pressed={Boolean(task.daily)}
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
                         task.daily
-                          ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:hover:bg-amber-900/70"
-                          : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                          ? "border-amber-400/80 bg-amber-100 text-amber-800 shadow-inner ring-1 ring-amber-400/50 hover:bg-amber-200 dark:border-amber-600/70 dark:bg-amber-900/60 dark:text-amber-300 dark:hover:bg-amber-900/80"
+                          : "border-transparent bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                       }`}
                     >
-                      {task.daily ? "Daily ★" : "Zet op Daily"}
+                      <DailySunIcon active={Boolean(task.daily)} className="h-3.5 w-3.5" />
+                      <span>{task.daily ? "Daily actief" : "Zet op Daily"}</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditingTask(JSON.parse(JSON.stringify(task)))}
-                      className="rounded-lg px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                      className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                     >
-                      Bewerken
+                      <EditPencilIcon className="h-3.5 w-3.5" />
+                      <span>Bewerken</span>
                     </button>
                   </div>
 
@@ -2104,77 +2315,28 @@
                 </div>
               </div>
 
-              {/* Tweede niveau: Weergaven + Acties */}
+              {/* Tweede niveau: Menu met 3 puntjes links van de weergaven + Weergaven + Account/Acties */}
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <nav className="flex flex-wrap items-center rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800">
-                  {[
-                    { id: "split", label: "Beide" },
-                    { id: "day", label: "Per Dag" },
-                    { id: "daily", label: `Daily (${dailyMarkedTasks.length})` },
-                    { id: "backlog", label: `Backlog (${backlogTasks.length})` },
-                    { id: "overdue", label: `Overdue (${overdueTasks.length})` },
-                    { id: "logbook", label: "Logboek" }
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setViewMode(tab.id)}
-                      className={`rounded-lg px-3 py-1.5 transition ${
-                        viewMode === tab.id ? accent.activeTab : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </nav>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleUndo}
-                    disabled={undoStack.length === 0}
-                    title={
-                      undoStack.length > 0
-                        ? `Ongedaan maak: ${undoStack[undoStack.length - 1].label}`
-                        : "Niets om ongedaan te maken"
-                    }
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                      undoStack.length > 0
-                        ? accent.undoBtn
-                        : "cursor-not-allowed border-slate-200 text-slate-400 opacity-50 dark:border-slate-800 dark:text-slate-600"
-                    }`}
-                  >
-                    Ongedaan maak{undoStack.length > 0 ? ` (${undoStack.length})` : ""}
-                  </button>
-
-                  {(!user || user.isAnonymous) && (
-                    <button
-                      type="button"
-                      onClick={handleGoogleLogin}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${accent.primaryBtn}`}
-                    >
-                      Inloggen met Google
-                    </button>
-                  )}
-
+                <div className="flex flex-wrap items-center gap-2">
                   <div ref={menuRef} className="relative">
                     <button
                       type="button"
                       onClick={() => setMenuOpen((o) => !o)}
                       aria-expanded={menuOpen}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      aria-label="Menu"
+                      title="Menu"
+                      className="relative inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
-                      <span>Menu</span>
+                      <MoreDotsIcon className="h-4 w-4" />
                       {openFeedbackCount > 0 && (
-                        <span className="rounded-full bg-amber-100 px-1.5 py-0.2 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        <span className="absolute -right-1.5 -top-1.5 rounded-full bg-amber-500 px-1.5 py-0.2 text-[10px] font-bold text-white shadow-xs">
                           {openFeedbackCount}
                         </span>
                       )}
-                      <span className="text-[10px]">{menuOpen ? "▲" : "▼"}</span>
                     </button>
 
                     {menuOpen && (
-                      <div className="absolute right-0 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+                      <div className="absolute left-0 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
                         <div className="border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
                           <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                             Account
@@ -2194,6 +2356,46 @@
                             type="button"
                             onClick={() => {
                               setMenuOpen(false);
+                              handleUndo();
+                            }}
+                            disabled={undoStack.length === 0}
+                            title={
+                              undoStack.length > 0
+                                ? `Ongedaan maak: ${undoStack[undoStack.length - 1].label}`
+                                : "Niets om ongedaan te maken"
+                            }
+                            className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium transition ${
+                              undoStack.length > 0
+                                ? "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                : "cursor-not-allowed text-slate-400 opacity-50 dark:text-slate-600"
+                            }`}
+                          >
+                            <span>Ongedaan maak</span>
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] dark:bg-slate-800">
+                              {undoStack.length}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOpen(false);
+                              setViewMode("logbook");
+                            }}
+                            className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium transition ${
+                              viewMode === "logbook"
+                                ? "bg-slate-100 font-semibold text-slate-900 dark:bg-slate-800 dark:text-white"
+                                : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                            }`}
+                          >
+                            <span>Logboek</span>
+                            <span className="text-slate-400">✓</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOpen(false);
                               setFeedbackModalOpen(true);
                             }}
                             className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -2207,6 +2409,7 @@
                             onClick={() => {
                               setMenuOpen(false);
                               setFeedbackCopied(false);
+                              setFeedbackTab("active");
                               setFeedbackListModalOpen(true);
                             }}
                             className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -2268,6 +2471,39 @@
                       </div>
                     )}
                   </div>
+
+                  <nav className="flex flex-wrap items-center rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800">
+                    {[
+                      { id: "split", label: "Beide" },
+                      { id: "day", label: "Per Dag" },
+                      { id: "daily", label: `Daily (${dailyMarkedTasks.length})` },
+                      { id: "backlog", label: `Backlog (${backlogTasks.length})` },
+                      { id: "overdue", label: `Overdue (${overdueTasks.length})` }
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setViewMode(tab.id)}
+                        className={`rounded-lg px-3 py-1.5 transition ${
+                          viewMode === tab.id ? accent.activeTab : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {(!user || user.isAnonymous) && (
+                    <button
+                      type="button"
+                      onClick={handleGoogleLogin}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${accent.primaryBtn}`}
+                    >
+                      Inloggen met Google
+                    </button>
+                  )}
 
                   <input
                     ref={fileInputRef}
@@ -2481,7 +2717,7 @@
 
                   {dailyMarkedTasks.length === 0 ? (
                     <p className="mt-5 rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
-                      Nog geen taken in de Daily. Rond een niet-terugkerende taak af of klik op &ldquo;Daily&rdquo; bij een taak.
+                      Nog geen taken in de Daily. Rond een niet-terugkerende taak af of klik op het zonnetje bij een taak.
                     </p>
                   ) : (
                     <div className="mt-5 space-y-3">
@@ -2910,7 +3146,7 @@
             )}
           </main>
 
-          {/* Pop-up: Alle feedback inzien, toevoegen, status bijhouden en verwijderen */}
+          {/* Pop-up: Alle feedback inzien, toevoegen, bewerken, status bijhouden, archiveren en verwijderen */}
           {feedbackListModalOpen && (
             <div
               onClick={closeFeedbackListModalWithoutSave}
@@ -2924,7 +3160,7 @@
                   <div>
                     <h3 className="text-base font-bold">Alle feedback ({feedbackItems.length})</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {openFeedbackCount} nog niet verwerkt • {feedbackItems.length - openFeedbackCount} verwerkt
+                      {openFeedbackCount} nog niet verwerkt • {archivedFeedbackItems.length} in archief (vóór vandaag verwerkt)
                     </p>
                   </div>
 
@@ -2948,33 +3184,79 @@
                   </div>
                 </div>
 
-                <form
-                  onSubmit={handleAddFeedbackInList}
-                  className="flex shrink-0 gap-2 border-b border-slate-100 bg-slate-50/70 px-6 py-3.5 dark:border-slate-800 dark:bg-slate-950/40"
-                >
-                  <input
-                    type="text"
-                    value={listFeedbackDraft}
-                    onChange={(e) => setListFeedbackDraft(e.target.value)}
-                    placeholder="Nieuwe feedback toevoegen..."
-                    className={`flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-900`}
-                  />
-                  <button
-                    type="submit"
-                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-white px-6 py-2.5 dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-medium dark:bg-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFeedbackTab("active");
+                        setEditingFeedbackId(null);
+                        setEditingFeedbackDraft("");
+                      }}
+                      className={`rounded-lg px-3 py-1.5 transition ${
+                        feedbackTab === "active"
+                          ? accent.activeTab
+                          : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                      }`}
+                    >
+                      Actueel ({currentFeedbackItems.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFeedbackTab("archive");
+                        setEditingFeedbackId(null);
+                        setEditingFeedbackDraft("");
+                      }}
+                      className={`rounded-lg px-3 py-1.5 transition ${
+                        feedbackTab === "archive"
+                          ? accent.activeTab
+                          : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                      }`}
+                    >
+                      Archief ({archivedFeedbackItems.length})
+                    </button>
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    {feedbackTab === "archive"
+                      ? "Verwerkt vóór vandaag"
+                      : "Open en vandaag verwerkt"}
+                  </span>
+                </div>
+
+                {feedbackTab === "active" && (
+                  <form
+                    onSubmit={handleAddFeedbackInList}
+                    className="flex shrink-0 gap-2 border-b border-slate-100 bg-slate-50/70 px-6 py-3.5 dark:border-slate-800 dark:bg-slate-950/40"
                   >
-                    Toevoegen
-                  </button>
-                </form>
+                    <input
+                      type="text"
+                      value={listFeedbackDraft}
+                      onChange={(e) => setListFeedbackDraft(e.target.value)}
+                      placeholder="Nieuwe feedback toevoegen..."
+                      className={`flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-900`}
+                    />
+                    <button
+                      type="submit"
+                      className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
+                    >
+                      Toevoegen
+                    </button>
+                  </form>
+                )}
 
                 <div className="flex-1 space-y-2.5 overflow-y-auto px-6 py-4">
-                  {feedbackItems.length === 0 ? (
+                  {visibleFeedbackItems.length === 0 ? (
                     <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
-                      Nog geen feedback opgeslagen.
+                      {feedbackTab === "archive"
+                        ? "Geen feedback in het archief van vóór vandaag."
+                        : "Nog geen feedback opgeslagen."}
                     </p>
                   ) : (
-                    feedbackItems.map((item) => {
+                    visibleFeedbackItems.map((item) => {
                       const isProcessed = Boolean(item.processed);
+                      const isEditingThis = editingFeedbackId === item.id;
+                      const isCopiedThis = copiedItemId === item.id;
                       return (
                         <div
                           key={item.id}
@@ -3005,25 +3287,110 @@
                                   </span>
                                 )}
                               </div>
-                              <p className="mt-2 whitespace-pre-line text-sm text-slate-800 dark:text-slate-100">
-                                {item.text}
-                              </p>
+
+                              {isEditingThis ? (
+                                <div className="mt-2.5 space-y-2">
+                                  <textarea
+                                    rows="3"
+                                    value={editingFeedbackDraft}
+                                    onChange={(e) => setEditingFeedbackDraft(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleSaveEditFeedback(item.id);
+                                      }
+                                    }}
+                                    className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100`}
+                                    autoFocus
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveEditFeedback(item.id)}
+                                      disabled={!editingFeedbackDraft.trim()}
+                                      className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                                        editingFeedbackDraft.trim()
+                                          ? accent.primaryBtn
+                                          : "cursor-not-allowed bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-600"
+                                      }`}
+                                    >
+                                      Opslaan
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEditFeedback}
+                                      className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                                    >
+                                      Annuleren
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="mt-2 whitespace-pre-line text-sm text-slate-800 dark:text-slate-100">
+                                  {item.text}
+                                </p>
+                              )}
                             </div>
 
                             <div className="flex shrink-0 items-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => handleToggleFeedbackProcessed(item.id)}
-                                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                                onClick={() => handleCopySingleFeedback(item)}
+                                aria-label="Kopieer tekst"
+                                title={isCopiedThis ? "Gekopieerd" : "Kopieer tekst"}
+                                className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border transition ${
+                                  isCopiedThis
+                                    ? "border-emerald-500/70 bg-emerald-100 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300"
+                                    : "border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                }`}
                               >
-                                {isProcessed ? "Markeer open" : "Markeer verwerkt"}
+                                {isCopiedThis ? (
+                                  <CheckDoneIcon className="h-4 w-4" />
+                                ) : (
+                                  <CopyTextIcon className="h-4 w-4" />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleFeedbackProcessed(item.id)}
+                                aria-pressed={isProcessed}
+                                aria-label={
+                                  isProcessed ? "Markeer als niet verwerkt" : "Markeer als verwerkt"
+                                }
+                                title={
+                                  isProcessed ? "Markeer als niet verwerkt" : "Markeer als verwerkt"
+                                }
+                                className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border transition ${
+                                  isProcessed
+                                    ? "border-emerald-500/70 bg-emerald-100 text-emerald-700 shadow-inner hover:bg-emerald-200/80 dark:border-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300 dark:hover:bg-emerald-900/80"
+                                    : "border-slate-200 text-slate-500 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300"
+                                }`}
+                              >
+                                <CheckDoneIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  isEditingThis ? handleCancelEditFeedback() : handleStartEditFeedback(item)
+                                }
+                                aria-label="Feedback bewerken"
+                                title="Feedback bewerken"
+                                className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition ${
+                                  isEditingThis
+                                    ? "bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-white"
+                                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                }`}
+                              >
+                                <EditPencilIcon className="h-4 w-4" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteFeedback(item.id)}
-                                className="rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
+                                aria-label="Feedback verwijderen"
+                                title="Feedback verwijderen"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
                               >
-                                Verwijderen
+                                <DeleteTrashIcon className="h-4 w-4" />
                               </button>
                             </div>
                           </div>
