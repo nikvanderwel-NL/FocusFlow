@@ -133,11 +133,39 @@
     window.dispatchEvent(new Event("focusflow-firebase-ready"));
   </script>
 
-  <!-- Apart factuurbestand voor het project Verburch -->
-  <script type="text/babel" src="verburch-invoices.js"></script>
+  <!-- Modulaire FocusFlow-bestanden in vaste laadvolgorde -->
+  <script type="text/babel" src="focusflow-ui-icons.js"></script>
+  <script type="text/babel" src="focusflow-dates-markdown.js"></script>
+  <script type="text/babel" src="focusflow-invoices.js"></script>
 
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    const {
+      PROJECTS,
+      getAccentClasses,
+      getProjectBadgeClasses,
+      getProjectLabel,
+      FocusFlowMark,
+      DailySunIcon,
+      EditPencilIcon,
+      DeleteTrashIcon
+    } = window.FocusFlowUI;
+
+    const {
+      toDateStr,
+      parseDateStr,
+      addDaysStr,
+      computeNextDueDate,
+      formatRecurrenceLabel,
+      formatDutchDate,
+      formatFullDutchDate,
+      formatDateTimeNL,
+      formatTimeOnlyNL,
+      markdownToEditorHtml,
+      hasMarkdownContent,
+      DirectMarkdownEditor
+    } = window.FocusFlowDatesMarkdown;
 
     const LOCAL_STORAGE_KEY = "focusflow_tasks_v3";
     const THEME_STORAGE_KEY = "focusflow_theme_v1";
@@ -145,668 +173,33 @@
     const INVOICES_STORAGE_KEY = "focusflow_invoices_v1";
     const INVOICE_DEFAULTS_STORAGE_KEY = "focusflow_invoice_defaults_v1";
 
-    const PROJECTS = [
-      { id: "werk", label: "Werk", color: "blue" },
-      { id: "verburch", label: "Verburch", color: "orange" },
-      { id: "persoonlijk", label: "Persoonlijk", color: "emerald" }
-    ];
-
-    function getAccentClasses(projectId) {
-      if (projectId === "werk") {
-        return {
-          primaryBtn: "bg-blue-600 hover:bg-blue-700 text-white",
-          activeTab: "bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-400",
-          badge: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300",
-          borderHover: "hover:border-blue-300 dark:hover:border-blue-700",
-          selectedDay: "border-blue-600 bg-blue-600 text-white shadow-sm",
-          undoBtn:
-            "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60",
-          focusRing: "focus:border-blue-500"
-        };
-      }
-      if (projectId === "verburch") {
-        return {
-          primaryBtn: "bg-orange-600 hover:bg-orange-700 text-white",
-          activeTab: "bg-white text-orange-600 shadow-sm dark:bg-slate-900 dark:text-orange-400",
-          badge: "bg-orange-50 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300",
-          borderHover: "hover:border-orange-300 dark:hover:border-orange-700",
-          selectedDay: "border-orange-600 bg-orange-600 text-white shadow-sm",
-          undoBtn:
-            "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-300 dark:hover:bg-orange-900/60",
-          focusRing: "focus:border-orange-500"
-        };
-      }
-      if (projectId === "persoonlijk") {
-        return {
-          primaryBtn: "bg-emerald-600 hover:bg-emerald-700 text-white",
-          activeTab: "bg-white text-emerald-600 shadow-sm dark:bg-slate-900 dark:text-emerald-400",
-          badge: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
-          borderHover: "hover:border-emerald-300 dark:hover:border-emerald-700",
-          selectedDay: "border-emerald-600 bg-emerald-600 text-white shadow-sm",
-          undoBtn:
-            "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60",
-          focusRing: "focus:border-emerald-500"
-        };
-      }
-      return {
-        primaryBtn: "bg-purple-600 hover:bg-purple-700 text-white",
-        activeTab: "bg-white text-purple-600 shadow-sm dark:bg-slate-900 dark:text-purple-400",
-        badge: "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300",
-        borderHover: "hover:border-purple-300 dark:hover:border-purple-700",
-        selectedDay: "border-purple-600 bg-purple-600 text-white shadow-sm",
-        undoBtn:
-          "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300 dark:hover:bg-purple-900/60",
-        focusRing: "focus:border-purple-500"
-      };
-    }
-
-    function FocusFlowMark({ className = "h-4 w-4" }) {
-      return (
-        <svg
-          className={className}
-          viewBox="0 0 64 64"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <path
-            d="M16 35l8 8 24-24"
-            stroke="currentColor"
-            strokeWidth="6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M32 45c7-1 13-6 16-14"
-            stroke="currentColor"
-            strokeOpacity="0.85"
-            strokeWidth="4.5"
-            strokeLinecap="round"
-          />
-          <path
-            d="M43 30l6 1-1 6"
-            stroke="currentColor"
-            strokeOpacity="0.85"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      );
-    }
-
-    function DailySunIcon({ active = false, className = "h-4 w-4" }) {
-      return (
-        <svg
-          className={className}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={active ? "2.2" : "1.8"}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="4.2" fill={active ? "currentColor" : "none"} />
-          <path d="M12 2.5v2.2M12 19.3v2.2M4.93 4.93l1.56 1.56M17.51 17.51l1.56 1.56M2.5 12h2.2M19.3 12h2.2M4.93 19.07l1.56-1.56M17.51 6.49l1.56-1.56" />
-        </svg>
-      );
-    }
-
-    function EditPencilIcon({ className = "h-4 w-4" }) {
-      return (
-        <svg
-          className={className}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-          <path d="M19.5 7.125L16.875 4.5" />
-        </svg>
-      );
-    }
-
-    function DeleteTrashIcon({ className = "h-4 w-4" }) {
-      return (
-        <svg
-          className={className}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M4 7h16" />
-          <path d="M9.5 7V5a1.5 1.5 0 011.5-1.5h2A1.5 1.5 0 0114.5 5v2" />
-          <path d="M6.5 7l.8 11.5A2 2 0 009.3 20.3h5.4a2 2 0 002-1.8L17.5 7" />
-          <path d="M10 11v5M14 11v5" />
-        </svg>
-      );
-    }
-
-    function getProjectBadgeClasses(projectId) {
-      if (projectId === "werk") {
-        return "bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300";
-      }
-      if (projectId === "verburch") {
-        return "bg-orange-100 text-orange-800 dark:bg-orange-950/80 dark:text-orange-300";
-      }
-      if (projectId === "persoonlijk") {
-        return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300";
-      }
-      return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
-    }
-
-    function getProjectLabel(projectId) {
-      return PROJECTS.find((p) => p.id === projectId)?.label || "Werk";
-    }
-
-    function toDateStr(dateObj = new Date()) {
-      const y = dateObj.getFullYear();
-      const m = String(dateObj.getMonth() + 1).padStart(2, "0");
-      const d = String(dateObj.getDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    }
-
-    function parseDateStr(str) {
-      if (!str) return null;
-      const [y, m, d] = str.split("-").map(Number);
-      if (!y || !m || !d) return null;
-      return new Date(y, m - 1, d);
-    }
-
-    function addDaysStr(dateStr, days) {
-      const base = parseDateStr(dateStr) || new Date();
-      base.setDate(base.getDate() + days);
-      return toDateStr(base);
-    }
-
-    function addMonthsStr(dateStr, months) {
-      const base = parseDateStr(dateStr) || new Date();
-      const targetDay = base.getDate();
-      base.setDate(1);
-      base.setMonth(base.getMonth() + months);
-      const maxDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
-      base.setDate(Math.min(targetDay, maxDay));
-      return toDateStr(base);
-    }
-
-    function computeNextDueDate(task, completedDateStr) {
-      const rec = task.recurrence;
-      if (!rec || rec.type === "none") return null;
-
-      const mode = rec.mode || "from_completion";
-      const anchorStr = mode === "from_due" && task.targetDate ? task.targetDate : completedDateStr;
-
-      if (rec.type === "daily") return addDaysStr(anchorStr, 1);
-      if (rec.type === "weekdays") {
-        let candidate = addDaysStr(anchorStr, 1);
-        while ([0, 6].includes(parseDateStr(candidate).getDay())) {
-          candidate = addDaysStr(candidate, 1);
-        }
-        return candidate;
-      }
-      if (rec.type === "weekly") return addDaysStr(anchorStr, 7);
-      if (rec.type === "biweekly") return addDaysStr(anchorStr, 14);
-      if (rec.type === "monthly") return addMonthsStr(anchorStr, 1);
-      if (rec.type === "custom") {
-        const interval = Math.max(1, Number(rec.interval) || 1);
-        const unit = rec.unit || "days";
-        if (unit === "days") return addDaysStr(anchorStr, interval);
-        if (unit === "weeks") return addDaysStr(anchorStr, interval * 7);
-        if (unit === "months") return addMonthsStr(anchorStr, interval);
-      }
-      return addDaysStr(anchorStr, 7);
-    }
-
-    function formatRecurrenceLabel(rec) {
-      if (!rec || rec.type === "none") return "";
-      const modeSuffix = rec.mode === "from_due" ? " (vaste cadans)" : " (vanaf afronden)";
-      if (rec.type === "daily") return "Dagelijks" + modeSuffix;
-      if (rec.type === "weekdays") return "Werkdagen (ma–vr)" + modeSuffix;
-      if (rec.type === "weekly") return "Wekelijks" + modeSuffix;
-      if (rec.type === "biweekly") return "Elke 2 weken" + modeSuffix;
-      if (rec.type === "monthly") return "Maandelijks" + modeSuffix;
-      if (rec.type === "custom") {
-        const n = Math.max(1, Number(rec.interval) || 1);
-        const unitMap = {
-          days: n === 1 ? "dag" : "dagen",
-          weeks: n === 1 ? "week" : "weken",
-          months: n === 1 ? "maand" : "maanden"
-        };
-        return `Elke ${n} ${unitMap[rec.unit || "days"]}` + modeSuffix;
-      }
-      return "";
-    }
-
-    function formatDutchDate(dateStr, todayStr) {
-      if (!dateStr) return "Geen datum";
-      const tomorrowStr = addDaysStr(todayStr, 1);
-      const yesterdayStr = addDaysStr(todayStr, -1);
-      if (dateStr === todayStr) return "Vandaag";
-      if (dateStr === tomorrowStr) return "Morgen";
-      if (dateStr === yesterdayStr) return "Gisteren";
-
-      const d = parseDateStr(dateStr);
-      if (!d) return dateStr;
-      return d.toLocaleDateString("nl-NL", {
-        weekday: "short",
-        day: "numeric",
-        month: "short"
-      });
-    }
-
-    function formatFullDutchDate(dateStr) {
-      const d = parseDateStr(dateStr);
-      if (!d) return dateStr;
-      return d.toLocaleDateString("nl-NL", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric"
-      });
-    }
-
-    function formatDateTimeNL(isoStr) {
-      if (!isoStr) return "";
-      const d = new Date(isoStr);
-      if (Number.isNaN(d.getTime())) return isoStr;
-      return d.toLocaleString("nl-NL", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    }
-
-    function formatTimeOnlyNL(isoStr) {
-      if (!isoStr) return "";
-      const d = new Date(isoStr);
-      if (Number.isNaN(d.getTime())) return "";
-      return d.toLocaleTimeString("nl-NL", {
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    }
-
-    function isSafeImageSrc(src) {
-      if (!src || typeof src !== "string") return false;
-      const trimmed = src.trim();
-      if (/^data:image\/(png|jpeg|jpg|gif|webp);base64,/i.test(trimmed)) return true;
+    function readJsonStorage(key, fallback) {
       try {
-        const parsed = new URL(trimmed);
-        return parsed.protocol === "https:" || parsed.protocol === "http:";
+        const raw = localStorage.getItem(key);
+        if (raw === null) return fallback;
+        return JSON.parse(raw);
       } catch {
-        return false;
+        return fallback;
       }
     }
 
-    function markdownToEditorHtml(mdText = "") {
-      if (!mdText) return "";
-      const lines = mdText.replace(/\r\n/g, "\n").split("\n");
-      const htmlParts = [];
-      let inUl = false;
-      let inOl = false;
-
-      const closeLists = () => {
-        if (inUl) {
-          htmlParts.push("</ul>");
-          inUl = false;
-        }
-        if (inOl) {
-          htmlParts.push("</ol>");
-          inOl = false;
-        }
-      };
-
-      const escapeHtml = (str) =>
-        str
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;");
-
-      const formatInline = (str) => {
-        const imgRegex = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
-        let result = "";
-        let lastIndex = 0;
-        let match;
-        while ((match = imgRegex.exec(str)) !== null) {
-          const before = escapeHtml(str.slice(lastIndex, match.index));
-          result += before;
-          const alt = escapeHtml(match[1] || "Afbeelding");
-          const url = match[2];
-          if (isSafeImageSrc(url)) {
-            result += `<img src="${escapeHtml(url)}" alt="${alt}" />`;
-          } else {
-            result += escapeHtml(match[0]);
-          }
-          lastIndex = imgRegex.lastIndex;
-        }
-        result += escapeHtml(str.slice(lastIndex));
-        return result;
-      };
-
-      for (const rawLine of lines) {
-        const line = rawLine.trimEnd();
-        if (!line.trim()) {
-          closeLists();
-          continue;
-        }
-
-        const h3Match = line.match(/^###\s+(.*)$/);
-        const h2Match = line.match(/^##\s+(.*)$/);
-        const h1Match = line.match(/^#\s+(.*)$/);
-        const ulMatch = line.match(/^[-*]\s+(.*)$/);
-        const olMatch = line.match(/^\d+\.\s+(.*)$/);
-
-        if (h1Match) {
-          closeLists();
-          htmlParts.push(`<h1>${formatInline(h1Match[1])}</h1>`);
-        } else if (h2Match) {
-          closeLists();
-          htmlParts.push(`<h2>${formatInline(h2Match[1])}</h2>`);
-        } else if (h3Match) {
-          closeLists();
-          htmlParts.push(`<h3>${formatInline(h3Match[1])}</h3>`);
-        } else if (ulMatch) {
-          if (!inUl) {
-            closeLists();
-            htmlParts.push("<ul>");
-            inUl = true;
-          }
-          htmlParts.push(`<li>${formatInline(ulMatch[1])}</li>`);
-        } else if (olMatch) {
-          if (!inOl) {
-            closeLists();
-            htmlParts.push("<ol>");
-            inOl = true;
-          }
-          htmlParts.push(`<li>${formatInline(olMatch[1])}</li>`);
-        } else {
-          closeLists();
-          htmlParts.push(`<p>${formatInline(line)}</p>`);
-        }
-      }
-
-      closeLists();
-      return htmlParts.join("");
+    function writeJsonStorage(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch {}
     }
 
-    function editorElementToMarkdown(el) {
-      if (!el) return "";
-      const blocks = [];
-
-      const walkNode = (node, listContext = null) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          return node.textContent || "";
-        }
-        if (node.nodeType !== Node.ELEMENT_NODE) return "";
-
-        const tag = node.tagName.toLowerCase();
-        if (tag === "img") {
-          const src = node.getAttribute("src") || "";
-          const alt = (node.getAttribute("alt") || "Afbeelding").replace(/\]/g, "");
-          if (isSafeImageSrc(src)) {
-            return `![${alt}](${src})`;
-          }
-          return "";
-        }
-        if (tag === "br") {
-          return "";
-        }
-
-        if (tag === "ul") {
-          const items = [];
-          Array.from(node.children).forEach((child) => {
-            if (child.tagName.toLowerCase() === "li") {
-              const txt = walkNode(child, "ul").trim();
-              if (txt) items.push(`- ${txt}`);
-            }
-          });
-          if (items.length) blocks.push(items.join("\n"));
-          return "";
-        }
-
-        if (tag === "ol") {
-          const items = [];
-          let counter = 1;
-          Array.from(node.children).forEach((child) => {
-            if (child.tagName.toLowerCase() === "li") {
-              const txt = walkNode(child, "ol").trim();
-              if (txt) {
-                items.push(`${counter}. ${txt}`);
-                counter += 1;
-              }
-            }
-          });
-          if (items.length) blocks.push(items.join("\n"));
-          return "";
-        }
-
-        if (tag === "h1" || tag === "h2" || tag === "h3") {
-          const prefix = tag === "h1" ? "# " : tag === "h2" ? "## " : "### ";
-          const inner = Array.from(node.childNodes)
-            .map((c) => walkNode(c, listContext))
-            .join("")
-            .trim();
-          if (inner) blocks.push(`${prefix}${inner}`);
-          return "";
-        }
-
-        if (tag === "p" || tag === "div") {
-          const imgs = Array.from(node.querySelectorAll("img"));
-          const nonImgText = Array.from(node.childNodes)
-            .filter((c) => !(c.nodeType === Node.ELEMENT_NODE && c.tagName.toLowerCase() === "img"))
-            .map((c) => walkNode(c, listContext))
-            .join("")
-            .trim();
-
-          if (nonImgText) {
-            const hMatch = nonImgText.match(/^(#{1,3})\s+(.*)$/);
-            const ulMatch = nonImgText.match(/^[-*]\s+(.*)$/);
-            const olMatch = nonImgText.match(/^(\d+)\.\s+(.*)$/);
-            if (hMatch) {
-              blocks.push(`${hMatch[1]} ${hMatch[2]}`);
-            } else if (ulMatch) {
-              blocks.push(`- ${ulMatch[1]}`);
-            } else if (olMatch) {
-              blocks.push(`${olMatch[1]}. ${olMatch[2]}`);
-            } else {
-              blocks.push(nonImgText);
-            }
-          }
-          imgs.forEach((imgEl) => {
-            const mdImg = walkNode(imgEl, listContext);
-            if (mdImg) blocks.push(mdImg);
-          });
-          return "";
-        }
-
-        return Array.from(node.childNodes)
-          .map((c) => walkNode(c, listContext))
-          .join("");
-      };
-
-      Array.from(el.childNodes).forEach((child) => {
-        if (child.nodeType === Node.TEXT_NODE) {
-          const t = (child.textContent || "").trim();
-          if (t) blocks.push(t);
-        } else {
-          walkNode(child, null);
-        }
-      });
-
-      return blocks.join("\n").trim();
+    function cloneValue(value) {
+      return JSON.parse(JSON.stringify(value));
     }
 
-    function hasMarkdownContent(notes) {
-      return Boolean(notes && notes.trim().length > 0);
-    }
-
-    function DirectMarkdownEditor({ value, onChange, onSaveShortcut }) {
-      const editorRef = useRef(null);
-      const lastValueRef = useRef(null);
-
-      useEffect(() => {
-        const el = editorRef.current;
-        if (!el) return;
-        if (value !== lastValueRef.current) {
-          el.innerHTML = markdownToEditorHtml(value || "");
-          lastValueRef.current = value || "";
-        }
-      }, [value]);
-
-      const syncFromDom = () => {
-        const el = editorRef.current;
-        if (!el) return;
-        const nextMd = editorElementToMarkdown(el);
-        lastValueRef.current = nextMd;
-        onChange(nextMd);
+    function normalizeTask(task) {
+      return {
+        ...task,
+        project: task.project || "werk",
+        daily: Boolean(task.daily),
+        dailyNote: task.dailyNote || ""
       };
-
-      const applyInlineMarkdownPattern = (el) => {
-        const sel = window.getSelection();
-        if (!sel || !sel.rangeCount) return;
-        const range = sel.getRangeAt(0);
-        if (!range.collapsed) return;
-
-        let block = range.startContainer;
-        if (block.nodeType === Node.TEXT_NODE) block = block.parentElement;
-        while (block && block !== el && !["P", "DIV", "LI", "H1", "H2", "H3"].includes(block.tagName)) {
-          block = block.parentElement;
-        }
-        if (!block || block === el || block.tagName === "LI") return;
-
-        const textBefore = block.textContent || "";
-        const hMatch = textBefore.match(/^(#{1,3})\s$/);
-        const ulMatch = textBefore.match(/^[-*]\s$/);
-        const olMatch = textBefore.match(/^1\.\s$/);
-
-        if (hMatch) {
-          const level = hMatch[1].length;
-          const heading = document.createElement(`h${level}`);
-          heading.innerHTML = "<br>";
-          block.replaceWith(heading);
-          const r = document.createRange();
-          r.setStart(heading, 0);
-          r.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(r);
-          syncFromDom();
-        } else if (ulMatch) {
-          const ul = document.createElement("ul");
-          const li = document.createElement("li");
-          li.innerHTML = "<br>";
-          ul.appendChild(li);
-          block.replaceWith(ul);
-          const r = document.createRange();
-          r.setStart(li, 0);
-          r.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(r);
-          syncFromDom();
-        } else if (olMatch) {
-          const ol = document.createElement("ol");
-          const li = document.createElement("li");
-          li.innerHTML = "<br>";
-          ol.appendChild(li);
-          block.replaceWith(ol);
-          const r = document.createRange();
-          r.setStart(li, 0);
-          r.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(r);
-          syncFromDom();
-        }
-      };
-
-      const insertImageIntoEditor = (src, alt = "Afbeelding") => {
-        if (!isSafeImageSrc(src)) return;
-        const el = editorRef.current;
-        if (!el) return;
-        const img = document.createElement("img");
-        img.src = src;
-        img.alt = alt;
-
-        const spacer = document.createElement("p");
-        spacer.innerHTML = "<br>";
-
-        const sel = window.getSelection();
-        if (sel && sel.rangeCount && el.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-          const range = sel.getRangeAt(0);
-          range.deleteContents();
-          range.insertNode(img);
-          range.setStartAfter(img);
-          range.insertNode(spacer);
-          range.setStart(spacer, 0);
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        } else {
-          el.appendChild(img);
-          el.appendChild(spacer);
-        }
-        syncFromDom();
-      };
-
-      const handlePaste = (e) => {
-        const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
-        const imageItem = items.find((item) => item.type && item.type.startsWith("image/"));
-
-        if (imageItem) {
-          e.preventDefault();
-          const file = imageItem.getAsFile();
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            if (typeof ev.target?.result === "string") {
-              insertImageIntoEditor(ev.target.result, file.name || "Geplakt plaatje");
-            }
-          };
-          reader.readAsDataURL(file);
-          return;
-        }
-
-        const pastedText = (e.clipboardData?.getData("text/plain") || "").trim();
-        if (/^https?:\/\/\S+\.(png|jpe?g|gif|webp)(\?\S*)?$/i.test(pastedText)) {
-          e.preventDefault();
-          insertImageIntoEditor(pastedText, "Afbeelding");
-        }
-      };
-
-      const handleKeyDown = (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-          e.preventDefault();
-          syncFromDom();
-          onSaveShortcut?.();
-          return;
-        }
-        if (e.key === " ") {
-          setTimeout(() => applyInlineMarkdownPattern(editorRef.current), 0);
-        }
-      };
-
-      return (
-        <div
-          ref={editorRef}
-          contentEditable
-          suppressContentEditableWarning
-          onInput={syncFromDom}
-          onPaste={handlePaste}
-          onKeyDown={handleKeyDown}
-          data-placeholder="Typ notities, gebruik # voor koppen, - of 1. voor lijsten en plak plaatjes direct..."
-          className="ff-notes-editor min-h-[150px] max-h-72 overflow-y-auto w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-        />
-      );
     }
 
     const INITIAL_TASKS = [
@@ -852,63 +245,40 @@
     ];
 
     function App() {
+      const invoiceModule = window.FocusFlowInvoices || {};
+      const InvoicesSection = invoiceModule.FocusFlowInvoicesSection || null;
+
       const [tasks, setTasks] = useState(() => {
-        try {
-          const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) {
-              return parsed.map((t) => ({
-                ...t,
-                project: t.project || "werk",
-                daily: Boolean(t.daily),
-                dailyNote: t.dailyNote || ""
-              }));
-            }
-          }
-        } catch (e) {}
+        const saved = readJsonStorage(LOCAL_STORAGE_KEY, null);
+        if (Array.isArray(saved)) return saved.map(normalizeTask);
         return INITIAL_TASKS;
       });
 
       const [invoices, setInvoices] = useState(() => {
-        try {
-          const saved = localStorage.getItem(INVOICES_STORAGE_KEY);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) return parsed;
-          }
-        } catch (e) {}
-        return [];
+        const saved = readJsonStorage(INVOICES_STORAGE_KEY, []);
+        return Array.isArray(saved) ? saved : [];
       });
 
       const [invoiceDefaults, setInvoiceDefaults] = useState(() => {
-        const fallback = window.VerburchInvoices?.DEFAULT_INVOICE_DEFAULTS || {
+        const fallback = invoiceModule.DEFAULT_INVOICE_DEFAULTS || {
           senderName: "SV Verburch",
           senderAddress: "",
           paymentInfo: "",
           defaultPaymentLink: "",
           presetLines: []
         };
-        try {
-          const saved = localStorage.getItem(INVOICE_DEFAULTS_STORAGE_KEY);
-          if (saved) {
-            return window.VerburchInvoices?.normalizeInvoiceDefaults
-              ? window.VerburchInvoices.normalizeInvoiceDefaults(JSON.parse(saved))
-              : { ...fallback, ...JSON.parse(saved) };
-          }
-        } catch (e) {}
+        const saved = readJsonStorage(INVOICE_DEFAULTS_STORAGE_KEY, null);
+        if (saved && typeof saved === "object") {
+          return invoiceModule.normalizeInvoiceDefaults
+            ? invoiceModule.normalizeInvoiceDefaults(saved)
+            : { ...fallback, ...saved };
+        }
         return fallback;
       });
 
       const [feedbackItems, setFeedbackItems] = useState(() => {
-        try {
-          const saved = localStorage.getItem(FEEDBACK_STORAGE_KEY);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) return parsed;
-          }
-        } catch (e) {}
-        return [];
+        const saved = readJsonStorage(FEEDBACK_STORAGE_KEY, []);
+        return Array.isArray(saved) ? saved : [];
       });
 
       const [undoStack, setUndoStack] = useState([]);
@@ -917,8 +287,8 @@
         try {
           const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
           if (savedTheme !== null) return savedTheme === "true";
-        } catch (e) {}
-        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        } catch {}
+        return Boolean(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
       });
 
       const [activeProject, setActiveProject] = useState("werk");
@@ -968,7 +338,6 @@
       const todayStr = toDateStr();
       const accent = useMemo(() => getAccentClasses(activeProject), [activeProject]);
 
-      // Facturen zijn alleen relevant bij activeProject === "verburch"
       useEffect(() => {
         if (activeProject !== "verburch" && viewMode === "invoices") {
           setViewMode(window.innerWidth < 768 ? "day" : "split");
@@ -1055,31 +424,23 @@
         document.documentElement.classList.toggle("dark", darkMode);
         try {
           localStorage.setItem(THEME_STORAGE_KEY, String(darkMode));
-        } catch (e) {}
+        } catch {}
       }, [darkMode]);
 
       useEffect(() => {
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
-        } catch (e) {}
+        writeJsonStorage(LOCAL_STORAGE_KEY, tasks);
       }, [tasks]);
 
       useEffect(() => {
-        try {
-          localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(invoices));
-        } catch (e) {}
+        writeJsonStorage(INVOICES_STORAGE_KEY, invoices);
       }, [invoices]);
 
       useEffect(() => {
-        try {
-          localStorage.setItem(INVOICE_DEFAULTS_STORAGE_KEY, JSON.stringify(invoiceDefaults));
-        } catch (e) {}
+        writeJsonStorage(INVOICE_DEFAULTS_STORAGE_KEY, invoiceDefaults);
       }, [invoiceDefaults]);
 
       useEffect(() => {
-        try {
-          localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(feedbackItems));
-        } catch (e) {}
+        writeJsonStorage(FEEDBACK_STORAGE_KEY, feedbackItems);
       }, [feedbackItems]);
 
       useEffect(() => {
@@ -1123,7 +484,7 @@
             try {
               setSyncStatus("Verbinden...");
               await signInAnonymously(auth);
-            } catch (err) {
+            } catch {
               setSyncStatus("Alleen lokaal");
             }
           }
@@ -1147,14 +508,7 @@
               const data = snap.data();
               if (Array.isArray(data.tasks)) {
                 skipNextCloudWriteRef.current = true;
-                setTasks(
-                  data.tasks.map((t) => ({
-                    ...t,
-                    project: t.project || "werk",
-                    daily: Boolean(t.daily),
-                    dailyNote: t.dailyNote || ""
-                  }))
-                );
+                setTasks(data.tasks.map(normalizeTask));
               }
               if (Array.isArray(data.invoices)) {
                 skipNextCloudInvoicesRef.current = true;
@@ -1163,8 +517,8 @@
               if (data.invoiceDefaults && typeof data.invoiceDefaults === "object") {
                 skipNextCloudInvoicesRef.current = true;
                 setInvoiceDefaults(
-                  window.VerburchInvoices?.normalizeInvoiceDefaults
-                    ? window.VerburchInvoices.normalizeInvoiceDefaults(data.invoiceDefaults)
+                  invoiceModule.normalizeInvoiceDefaults
+                    ? invoiceModule.normalizeInvoiceDefaults(data.invoiceDefaults)
                     : data.invoiceDefaults
                 );
               }
@@ -1185,7 +539,7 @@
         );
 
         return () => unsub();
-      }, [fbReady, user]);
+      }, [fbReady, user, invoiceModule]);
 
       async function saveTasksToCloud(
         nextTasks,
@@ -1203,12 +557,8 @@
             updatedAt: new Date().toISOString(),
             ownerEmail: user.email || null
           };
-          if (Array.isArray(nextFeedback)) {
-            payload.feedback = nextFeedback;
-          }
-          if (Array.isArray(nextInvoices)) {
-            payload.invoices = nextInvoices;
-          }
+          if (Array.isArray(nextFeedback)) payload.feedback = nextFeedback;
+          if (Array.isArray(nextInvoices)) payload.invoices = nextInvoices;
           if (nextInvoiceDefaults && typeof nextInvoiceDefaults === "object") {
             payload.invoiceDefaults = nextInvoiceDefaults;
           }
@@ -1225,9 +575,7 @@
       function updateInvoicesState(updater, nextDefaultsOverride = null) {
         setInvoices((prev) => {
           const next = typeof updater === "function" ? updater(prev) : updater;
-          try {
-            localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(next));
-          } catch (e) {}
+          writeJsonStorage(INVOICES_STORAGE_KEY, next);
           if (skipNextCloudInvoicesRef.current) {
             skipNextCloudInvoicesRef.current = false;
           } else {
@@ -1245,7 +593,11 @@
             ? prev.map((item) => (item.id === record.id ? record : item))
             : [record, ...prev];
         });
-        showToast(isNew ? `Factuur ${record.invoiceNumber} aangemaakt` : `Factuur ${record.invoiceNumber} opgeslagen`);
+        showToast(
+          isNew
+            ? `Factuur ${record.invoiceNumber} aangemaakt`
+            : `Factuur ${record.invoiceNumber} opgeslagen`
+        );
       }
 
       function handleDeleteInvoice(invoiceId) {
@@ -1267,19 +619,15 @@
 
       function handleSaveInvoiceDefaults(nextDefaults) {
         setInvoiceDefaults(nextDefaults);
-        try {
-          localStorage.setItem(INVOICE_DEFAULTS_STORAGE_KEY, JSON.stringify(nextDefaults));
-        } catch (e) {}
+        writeJsonStorage(INVOICE_DEFAULTS_STORAGE_KEY, nextDefaults);
         saveTasksToCloud(tasks, null, invoices, nextDefaults);
-        showToast("Standaardinstellingen voor Verburch-facturen opgeslagen");
+        showToast("Standaardinstellingen voor facturen opgeslagen");
       }
 
       function updateFeedbackState(updater) {
         setFeedbackItems((prev) => {
           const next = typeof updater === "function" ? updater(prev) : updater;
-          try {
-            localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(next));
-          } catch (e) {}
+          writeJsonStorage(FEEDBACK_STORAGE_KEY, next);
           if (skipNextCloudFeedbackRef.current) {
             skipNextCloudFeedbackRef.current = false;
           } else {
@@ -1376,7 +724,7 @@
 
       function commitTasksChange(updater, actionLabel = "Wijziging") {
         setTasks((prev) => {
-          const snapshot = JSON.parse(JSON.stringify(prev));
+          const snapshot = cloneValue(prev);
           const next = typeof updater === "function" ? updater(prev) : updater;
           setUndoStack((stack) => [...stack.slice(-19), { tasks: snapshot, label: actionLabel }]);
           if (skipNextCloudWriteRef.current) {
@@ -1397,7 +745,7 @@
         setUndoStack((stack) => {
           if (stack.length === 0) return stack;
           const lastEntry = stack[stack.length - 1];
-          const currentSnapshot = JSON.parse(JSON.stringify(tasks));
+          const currentSnapshot = cloneValue(tasks);
           applyDirectTasksState(lastEntry.tasks);
           setToast({
             message: `Ongedaan gemaakt: ${lastEntry.label}`,
@@ -1709,12 +1057,7 @@
           try {
             const parsed = JSON.parse(ev.target.result);
             if (!Array.isArray(parsed)) throw new Error("Ongeldig formaat");
-            const normalized = parsed.map((t) => ({
-              ...t,
-              project: t.project || "werk",
-              daily: Boolean(t.daily),
-              dailyNote: t.dailyNote || ""
-            }));
+            const normalized = parsed.map(normalizeTask);
             commitTasksChange(normalized, "JSON-import");
             showToast(`${normalized.length} taken geïmporteerd`, true);
           } catch {
@@ -1766,7 +1109,10 @@
 
       const selectedDateDoneTasks = useMemo(() => {
         return filteredTasks.filter((t) => {
-          if (t.status === "done" && (t.targetDate === selectedDate || (!t.targetDate && selectedDate === todayStr))) {
+          if (
+            t.status === "done" &&
+            (t.targetDate === selectedDate || (!t.targetDate && selectedDate === todayStr))
+          ) {
             return true;
           }
           if (Array.isArray(t.completions)) {
@@ -1804,7 +1150,9 @@
         for (const t of filteredTasks) {
           if (Array.isArray(t.completions) && t.completions.length > 0) {
             t.completions.forEach((c, idx) => {
-              const dtStr = c.completedAt ? toDateStr(new Date(c.completedAt)) : c.scheduledDate || todayStr;
+              const dtStr = c.completedAt
+                ? toDateStr(new Date(c.completedAt))
+                : c.scheduledDate || todayStr;
               entries.push({
                 key: `${t.id}-${idx}-${c.completedAt || idx}`,
                 taskId: t.id,
@@ -1869,14 +1217,18 @@
           return [...baseTabs, { id: "invoices", label: `Facturen (${openInvoicesCount})` }];
         }
         return baseTabs;
-      }, [activeProject, dailyMarkedTasks.length, backlogTasks.length, overdueTasks.length, openInvoicesCount]);
+      }, [
+        activeProject,
+        dailyMarkedTasks.length,
+        backlogTasks.length,
+        overdueTasks.length,
+        openInvoicesCount
+      ]);
 
       const accountLabel =
         user && !user.isAnonymous
           ? user.displayName || user.email || "Google-account"
           : "Niet ingelogd met Google";
-
-      const InvoicesComponent = window.VerburchInvoices?.VerburchInvoicesSection || null;
 
       function renderTaskCard(task, options = {}) {
         const { showScheduleActions = false, isCompletedEntry = false } = options;
@@ -1954,7 +1306,7 @@
                     </button>
                     <button
                       type="button"
-                      onClick={() => setEditingTask(JSON.parse(JSON.stringify(task)))}
+                      onClick={() => setEditingTask(cloneValue(task))}
                       aria-label="Bewerken"
                       title="Bewerken"
                       className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
@@ -2193,7 +1545,7 @@
                     </button>
                     <button
                       type="button"
-                      onClick={() => setEditingTask(JSON.parse(JSON.stringify(task)))}
+                      onClick={() => setEditingTask(cloneValue(task))}
                       className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                     >
                       <EditPencilIcon className="h-3.5 w-3.5" />
@@ -2249,7 +1601,9 @@
                         ? "border-orange-200 bg-orange-50/70 text-orange-800 hover:bg-orange-100 dark:border-orange-900/70 dark:bg-orange-950/30 dark:text-orange-300 dark:hover:bg-orange-950/60"
                         : "border-emerald-200 bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/60";
 
-                    const count = tasks.filter((t) => (t.project || "werk") === proj.id && t.status === "todo").length;
+                    const count = tasks.filter(
+                      (t) => (t.project || "werk") === proj.id && t.status === "todo"
+                    ).length;
 
                     return (
                       <button
@@ -2318,7 +1672,9 @@
                       type="button"
                       onClick={() => setViewMode(tab.id)}
                       className={`rounded-lg px-3 py-1.5 transition ${
-                        viewMode === tab.id ? accent.activeTab : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                        viewMode === tab.id
+                          ? accent.activeTab
+                          : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                       }`}
                     >
                       {tab.label}
@@ -2664,8 +2020,8 @@
               </form>
             )}
 
-            {viewMode === "invoices" && activeProject === "verburch" && InvoicesComponent && (
-              <InvoicesComponent
+            {viewMode === "invoices" && activeProject === "verburch" && InvoicesSection && (
+              <InvoicesSection
                 invoices={invoices}
                 invoiceDefaults={invoiceDefaults}
                 todayStr={todayStr}
@@ -2865,7 +2221,9 @@
                             type="button"
                             onClick={() => setDayLayout("focus")}
                             className={`rounded-md px-2.5 py-1 ${
-                              dayLayout === "focus" ? accent.activeTab : "text-slate-600 dark:text-slate-300"
+                              dayLayout === "focus"
+                                ? accent.activeTab
+                                : "text-slate-600 dark:text-slate-300"
                             }`}
                           >
                             Dagfocus
@@ -2874,7 +2232,9 @@
                             type="button"
                             onClick={() => setDayLayout("agenda")}
                             className={`rounded-md px-2.5 py-1 ${
-                              dayLayout === "agenda" ? accent.activeTab : "text-slate-600 dark:text-slate-300"
+                              dayLayout === "agenda"
+                                ? accent.activeTab
+                                : "text-slate-600 dark:text-slate-300"
                             }`}
                           >
                             Per dag onder elkaar
@@ -2969,7 +2329,8 @@
                         <div className="mt-5 space-y-2.5">
                           {selectedDateTodoTasks.length === 0 ? (
                             <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800">
-                              Geen openstaande taken gepland voor {formatDutchDate(selectedDate, todayStr).toLowerCase()}.
+                              Geen openstaande taken gepland voor{" "}
+                              {formatDutchDate(selectedDate, todayStr).toLowerCase()}.
                             </div>
                           ) : (
                             selectedDateTodoTasks.map((t) =>
@@ -3100,7 +2461,9 @@
                             type="button"
                             onClick={() => setBacklogFilter(f.id)}
                             className={`rounded-md px-2.5 py-1 ${
-                              backlogFilter === f.id ? accent.activeTab : "text-slate-600 dark:text-slate-300"
+                              backlogFilter === f.id
+                                ? accent.activeTab
+                                : "text-slate-600 dark:text-slate-300"
                             }`}
                           >
                             {f.label}
