@@ -140,7 +140,6 @@
     const THEME_STORAGE_KEY = "focusflow_theme_v1";
     const FEEDBACK_STORAGE_KEY = "focusflow_feedback_v1";
     const INVOICES_STORAGE_KEY = "focusflow_invoices_v1";
-    const INVOICE_DEFAULTS_STORAGE_KEY = "focusflow_invoice_defaults_v1";
 
     const PROJECTS = [
       { id: "werk", label: "Werk", color: "blue" },
@@ -160,14 +159,6 @@
       { id: "nvt", label: "NVT" },
       { id: "uitbetaald", label: "Uitbetaald" }
     ];
-
-    const INITIAL_INVOICE_DEFAULTS = {
-      senderName: "Verburch",
-      senderAddress: "",
-      paymentInfo: "",
-      defaultPaymentLink: "",
-      standardLines: []
-    };
 
     // Accentkleuren gekoppeld aan het gekozen project; 'all' behoudt het paarse accent
     function getAccentClasses(projectId) {
@@ -309,7 +300,7 @@
       );
     }
 
-    // Kopieer-icoontje voor kopiëren van tekst
+    // Kopieer-icoontje voor kopiëren van feedbacktekst
     function CopyTextIcon({ className = "h-4 w-4" }) {
       return (
         <svg
@@ -387,18 +378,6 @@
       return copied;
     }
 
-    function isSafeExternalUrl(urlStr) {
-      if (!urlStr || typeof urlStr !== "string") return false;
-      const trimmed = urlStr.trim();
-      if (!trimmed) return false;
-      try {
-        const parsed = new URL(trimmed);
-        return parsed.protocol === "https:" || parsed.protocol === "http:";
-      } catch {
-        return false;
-      }
-    }
-
     function formatEuro(amount) {
       const num = Number(amount);
       const safe = Number.isFinite(num) ? num : 0;
@@ -454,32 +433,16 @@
       };
     }
 
-    function cloneLineWithNewId(line) {
-      return {
-        id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        subject: line?.subject || "",
-        quantity: Number(line?.quantity) || 1,
-        totalPrice: Number(line?.totalPrice) || 0
-      };
-    }
-
-    function createBlankInvoice(todayStr, defaults = INITIAL_INVOICE_DEFAULTS) {
-      const presetLines = Array.isArray(defaults?.standardLines)
-        ? defaults.standardLines.map(cloneLineWithNewId)
-        : [];
+    function createBlankInvoice(todayStr) {
       return {
         id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         number: "",
         client: "",
-        senderName: defaults?.senderName || "",
-        senderAddress: defaults?.senderAddress || "",
-        paymentInfo: defaults?.paymentInfo || "",
-        paymentLink: defaults?.defaultPaymentLink || "",
         invoiceDate: todayStr,
         dueDate: addDaysStr(todayStr, 14),
         status: "concept",
         bardienstStatus: "open",
-        lines: presetLines.length > 0 ? presetLines : [createEmptyInvoiceLine()],
+        lines: [createEmptyInvoiceLine()],
         notes: "",
         createdAt: new Date().toISOString()
       };
@@ -1061,10 +1024,6 @@
         id: "inv-1",
         number: "VB-2026-001",
         client: "Toernooi / Evenement Verburch",
-        senderName: "Verburch",
-        senderAddress: "",
-        paymentInfo: "",
-        paymentLink: "",
         invoiceDate: toDateStr(),
         dueDate: addDaysStr(toDateStr(), 14),
         status: "verzonden",
@@ -1118,25 +1077,6 @@
         return INITIAL_INVOICES;
       });
 
-      const [invoiceDefaults, setInvoiceDefaults] = useState(() => {
-        try {
-          const saved = localStorage.getItem(INVOICE_DEFAULTS_STORAGE_KEY);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (parsed && typeof parsed === "object") {
-              return {
-                senderName: parsed.senderName ?? INITIAL_INVOICE_DEFAULTS.senderName,
-                senderAddress: parsed.senderAddress ?? "",
-                paymentInfo: parsed.paymentInfo ?? "",
-                defaultPaymentLink: parsed.defaultPaymentLink ?? "",
-                standardLines: Array.isArray(parsed.standardLines) ? parsed.standardLines : []
-              };
-            }
-          }
-        } catch (e) {}
-        return INITIAL_INVOICE_DEFAULTS;
-      });
-
       const [feedbackItems, setFeedbackItems] = useState(() => {
         try {
           const saved = localStorage.getItem(FEEDBACK_STORAGE_KEY);
@@ -1174,9 +1114,6 @@
       const [showCompletedInAllTasks, setShowCompletedInAllTasks] = useState(true);
       const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
       const [editingInvoice, setEditingInvoice] = useState(null);
-      const [defaultsModalOpen, setDefaultsModalOpen] = useState(false);
-      const [defaultsDraft, setDefaultsDraft] = useState(INITIAL_INVOICE_DEFAULTS);
-      const [selectedPresetLineIdx, setSelectedPresetLineIdx] = useState("0");
       const [menuOpen, setMenuOpen] = useState(false);
       // State voor de feedback-pop-up die overal via Ctrl+Shift+F / Cmd+Shift+F geopend kan worden
       const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -1210,7 +1147,6 @@
       const skipNextCloudWriteRef = useRef(false);
       const skipNextCloudFeedbackRef = useRef(false);
       const skipNextCloudInvoicesRef = useRef(false);
-      const skipNextCloudDefaultsRef = useRef(false);
       const fileInputRef = useRef(null);
       const menuRef = useRef(null);
       const editFormRef = useRef(null);
@@ -1247,18 +1183,13 @@
         setEditingInvoice(null);
       }, []);
 
-      const closeDefaultsModalWithoutSave = useCallback(() => {
-        setDefaultsModalOpen(false);
-      }, []);
-
       // Escape sluit eerst actieve inline feedbackbewerking, anders de bovenliggende open pop-up zonder op te slaan
       useEffect(() => {
         const hasOpenModal =
           feedbackModalOpen ||
           feedbackListModalOpen ||
           Boolean(editingTask) ||
-          Boolean(editingInvoice) ||
-          defaultsModalOpen;
+          Boolean(editingInvoice);
         if (!hasOpenModal) return;
 
         function handleModalEscape(e) {
@@ -1275,8 +1206,6 @@
             } else {
               closeFeedbackListModalWithoutSave();
             }
-          } else if (defaultsModalOpen) {
-            closeDefaultsModalWithoutSave();
           } else if (editingInvoice) {
             closeInvoiceModalWithoutSave();
           } else if (editingTask) {
@@ -1291,11 +1220,9 @@
         feedbackListModalOpen,
         editingTask,
         editingInvoice,
-        defaultsModalOpen,
         editingFeedbackId,
         closeFeedbackModalWithoutSave,
         closeFeedbackListModalWithoutSave,
-        closeDefaultsModalWithoutSave,
         closeInvoiceModalWithoutSave,
         closeEditModalWithoutSave
       ]);
@@ -1354,12 +1281,6 @@
           localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(invoices));
         } catch (e) {}
       }, [invoices]);
-
-      useEffect(() => {
-        try {
-          localStorage.setItem(INVOICE_DEFAULTS_STORAGE_KEY, JSON.stringify(invoiceDefaults));
-        } catch (e) {}
-      }, [invoiceDefaults]);
 
       useEffect(() => {
         try {
@@ -1449,18 +1370,6 @@
                 skipNextCloudInvoicesRef.current = true;
                 setInvoices(data.invoices);
               }
-              if (data.invoiceDefaults && typeof data.invoiceDefaults === "object") {
-                skipNextCloudDefaultsRef.current = true;
-                setInvoiceDefaults({
-                  senderName: data.invoiceDefaults.senderName ?? INITIAL_INVOICE_DEFAULTS.senderName,
-                  senderAddress: data.invoiceDefaults.senderAddress ?? "",
-                  paymentInfo: data.invoiceDefaults.paymentInfo ?? "",
-                  defaultPaymentLink: data.invoiceDefaults.defaultPaymentLink ?? "",
-                  standardLines: Array.isArray(data.invoiceDefaults.standardLines)
-                    ? data.invoiceDefaults.standardLines
-                    : []
-                });
-              }
               setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
             } else {
               setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
@@ -1476,12 +1385,7 @@
         return () => unsub();
       }, [fbReady, user]);
 
-      async function saveTasksToCloud(
-        nextTasks,
-        nextFeedback = null,
-        nextInvoices = null,
-        nextDefaults = null
-      ) {
+      async function saveTasksToCloud(nextTasks, nextFeedback = null, nextInvoices = null) {
         if (!fbReady || !window.FocusFlowFirebase || !user) return;
         const { db, doc, setDoc } = window.FocusFlowFirebase;
         try {
@@ -1497,9 +1401,6 @@
           }
           if (Array.isArray(nextInvoices)) {
             payload.invoices = nextInvoices;
-          }
-          if (nextDefaults && typeof nextDefaults === "object") {
-            payload.invoiceDefaults = nextDefaults;
           }
           await setDoc(userDocRef, payload, { merge: true });
           setSyncStatus(user.isAnonymous ? "Cloud (anoniem)" : "Cloud");
@@ -1520,71 +1421,10 @@
           if (skipNextCloudInvoicesRef.current) {
             skipNextCloudInvoicesRef.current = false;
           } else {
-            saveTasksToCloud(tasks, null, next, null);
+            saveTasksToCloud(tasks, null, next);
           }
           return next;
         });
-      }
-
-      function handleOpenDefaultsModal() {
-        setDefaultsDraft({
-          senderName: invoiceDefaults.senderName ?? "",
-          senderAddress: invoiceDefaults.senderAddress ?? "",
-          paymentInfo: invoiceDefaults.paymentInfo ?? "",
-          defaultPaymentLink: invoiceDefaults.defaultPaymentLink ?? "",
-          standardLines: Array.isArray(invoiceDefaults.standardLines)
-            ? invoiceDefaults.standardLines.map(cloneLineWithNewId)
-            : []
-        });
-        setDefaultsModalOpen(true);
-      }
-
-      function handleSaveDefaults(e) {
-        if (e && e.preventDefault) e.preventDefault();
-        const cleanedLines = (defaultsDraft.standardLines || [])
-          .filter((l) => (l.subject || "").trim() || Number(l.totalPrice) > 0)
-          .map((l) => ({
-            id: l.id || `std-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-            subject: (l.subject || "").trim(),
-            quantity: Math.max(0, Number(l.quantity) || 1),
-            totalPrice: Math.max(0, Number(l.totalPrice) || 0)
-          }));
-
-        const nextDefaults = {
-          senderName: (defaultsDraft.senderName || "").trim(),
-          senderAddress: (defaultsDraft.senderAddress || "").trim(),
-          paymentInfo: (defaultsDraft.paymentInfo || "").trim(),
-          defaultPaymentLink: (defaultsDraft.defaultPaymentLink || "").trim(),
-          standardLines: cleanedLines
-        };
-
-        setInvoiceDefaults(nextDefaults);
-        try {
-          localStorage.setItem(INVOICE_DEFAULTS_STORAGE_KEY, JSON.stringify(nextDefaults));
-        } catch (err) {}
-        if (skipNextCloudDefaultsRef.current) {
-          skipNextCloudDefaultsRef.current = false;
-        } else {
-          saveTasksToCloud(tasks, null, null, nextDefaults);
-        }
-        setDefaultsModalOpen(false);
-        showToast("Standaardinstellingen voor Verburch-facturen opgeslagen");
-      }
-
-      function handleInsertPresetLineIntoInvoice() {
-        const list = invoiceDefaults.standardLines || [];
-        if (list.length === 0) return;
-        const idx = Math.max(0, Math.min(list.length - 1, Number(selectedPresetLineIdx) || 0));
-        const chosen = list[idx];
-        if (!chosen) return;
-        setEditingInvoice((prev) =>
-          prev
-            ? {
-                ...prev,
-                lines: [...(prev.lines || []), cloneLineWithNewId(chosen)]
-              }
-            : null
-        );
       }
 
       function handleSaveInvoice(e) {
@@ -1602,10 +1442,6 @@
           ...editingInvoice,
           number: (editingInvoice.number || "").trim(),
           client: (editingInvoice.client || "").trim(),
-          senderName: (editingInvoice.senderName || "").trim(),
-          senderAddress: (editingInvoice.senderAddress || "").trim(),
-          paymentInfo: (editingInvoice.paymentInfo || "").trim(),
-          paymentLink: (editingInvoice.paymentLink || "").trim(),
           invoiceDate: editingInvoice.invoiceDate || todayStr,
           dueDate: editingInvoice.dueDate || null,
           status: editingInvoice.status || "concept",
@@ -2269,7 +2105,7 @@
               });
             });
           } else if (t.status === "done") {
-            const dtStr = t.completedAt ? toDateStr(new Date(t.completedAt)) : t.targetDate || todayStr;
+            const dtStr = t.completedAt ? toDateStr(new Date(c.completedAt)) : t.targetDate || todayStr;
             entries.push({
               key: `${t.id}-done`,
               taskId: t.id,
@@ -3170,28 +3006,17 @@
                     <div>
                       <h2 className="text-lg font-bold">Facturen — Verburch</h2>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Beheer facturen, standaardgegevens, factuurregels en bardienstuitbetalingen (NVT en Uitbetaald zijn compleet).
+                        Beheer facturen, factuurregels en bardienstuitbetalingen (NVT en Uitbetaald zijn compleet).
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleOpenDefaultsModal}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                      >
-                        Standaardinstellingen ({(invoiceDefaults.standardLines || []).length} regels)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEditingInvoice(createBlankInvoice(todayStr, invoiceDefaults))
-                        }
-                        className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
-                      >
-                        + Nieuwe factuur
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingInvoice(createBlankInvoice(todayStr))}
+                      className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
+                    >
+                      + Nieuwe factuur
+                    </button>
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -3255,7 +3080,6 @@
                       filteredInvoices.map((inv) => {
                         const invTotal = computeInvoiceTotal(inv.lines);
                         const bardienstVal = inv.bardienstStatus || "open";
-                        const linkValid = isSafeExternalUrl(inv.paymentLink);
                         return (
                           <div
                             key={inv.id}
@@ -3289,7 +3113,6 @@
                                 </div>
 
                                 <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                                  {inv.senderName && <span>Van: {inv.senderName}</span>}
                                   {inv.invoiceDate && <span>Datum: {inv.invoiceDate}</span>}
                                   {inv.dueDate && <span>Vervaldatum: {inv.dueDate}</span>}
                                   <span>
@@ -3299,41 +3122,6 @@
                                       : "regels"}
                                   </span>
                                 </div>
-
-                                {inv.paymentLink && (
-                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                                    <span className="text-slate-500 dark:text-slate-400">
-                                      Betaallink:
-                                    </span>
-                                    {linkValid ? (
-                                      <a
-                                        href={inv.paymentLink.trim()}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="truncate font-medium text-orange-600 underline hover:text-orange-700 dark:text-orange-400"
-                                      >
-                                        {inv.paymentLink.trim()}
-                                      </a>
-                                    ) : (
-                                      <span className="truncate font-medium text-slate-700 dark:text-slate-300">
-                                        {inv.paymentLink.trim()}
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (copyPlainTextToClipboard(inv.paymentLink.trim())) {
-                                          showToast("Betaallink gekopieerd");
-                                        }
-                                      }}
-                                      aria-label="Kopieer betaallink"
-                                      title="Kopieer betaallink"
-                                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                                    >
-                                      <CopyTextIcon className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                )}
                               </div>
 
                               <div className="flex items-center gap-2">
@@ -3966,234 +3754,7 @@
             )}
           </main>
 
-          {/* Pop-up: Standaardinstellingen voor Verburch-facturen */}
-          {defaultsModalOpen && (
-            <div
-              onClick={closeDefaultsModalWithoutSave}
-              className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
-            >
-              <form
-                onClick={(e) => e.stopPropagation()}
-                onSubmit={handleSaveDefaults}
-                className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
-              >
-                <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
-                  <div>
-                    <h3 className="text-base font-bold">Standaardinstellingen — Verburch</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Worden standaard overgenomen bij nieuwe facturen en zijn als snelkeuze beschikbaar.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={closeDefaultsModalWithoutSave}
-                    className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Standaard afzender / organisatie
-                      </label>
-                      <input
-                        type="text"
-                        value={defaultsDraft.senderName || ""}
-                        onChange={(e) =>
-                          setDefaultsDraft({ ...defaultsDraft, senderName: e.target.value })
-                        }
-                        placeholder="Bijv. Verburch"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Betaalgegevens / IBAN
-                      </label>
-                      <input
-                        type="text"
-                        value={defaultsDraft.paymentInfo || ""}
-                        onChange={(e) =>
-                          setDefaultsDraft({ ...defaultsDraft, paymentInfo: e.target.value })
-                        }
-                        placeholder="Bijv. NL00 BANK 0123 4567 89"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Standaard adres / contactinfo
-                      </label>
-                      <input
-                        type="text"
-                        value={defaultsDraft.senderAddress || ""}
-                        onChange={(e) =>
-                          setDefaultsDraft({ ...defaultsDraft, senderAddress: e.target.value })
-                        }
-                        placeholder="Adres of contactgegevens"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Standaard betaallink (optioneel)
-                      </label>
-                      <input
-                        type="url"
-                        value={defaultsDraft.defaultPaymentLink || ""}
-                        onChange={(e) =>
-                          setDefaultsDraft({
-                            ...defaultsDraft,
-                            defaultPaymentLink: e.target.value
-                          })
-                        }
-                        placeholder="https://..."
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/50">
-                    <div className="mb-2.5 flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                        Standaard factuurregels
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDefaultsDraft((prev) => ({
-                            ...prev,
-                            standardLines: [
-                              ...(prev.standardLines || []),
-                              createEmptyInvoiceLine()
-                            ]
-                          }))
-                        }
-                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        + Standaardregel toevoegen
-                      </button>
-                    </div>
-
-                    {(defaultsDraft.standardLines || []).length === 0 ? (
-                      <p className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500 dark:border-slate-800">
-                        Nog geen standaardregels ingesteld. Voeg een regel toe als je vaak dezelfde regel gebruikt.
-                      </p>
-                    ) : (
-                      <div className="space-y-2.5">
-                        {(defaultsDraft.standardLines || []).map((line, idx) => (
-                          <div
-                            key={line.id || idx}
-                            className="grid gap-2 sm:grid-cols-12 items-center"
-                          >
-                            <div className="sm:col-span-6">
-                              <input
-                                type="text"
-                                value={line.subject || ""}
-                                onChange={(e) => {
-                                  const nextVal = e.target.value;
-                                  setDefaultsDraft((prev) => ({
-                                    ...prev,
-                                    standardLines: (prev.standardLines || []).map((l, i) =>
-                                      i === idx ? { ...l, subject: nextVal } : l
-                                    )
-                                  }));
-                                }}
-                                placeholder="Onderwerp"
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
-                              />
-                            </div>
-                            <div className="sm:col-span-2">
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                value={line.quantity ?? 1}
-                                onChange={(e) => {
-                                  const nextQty = e.target.value;
-                                  setDefaultsDraft((prev) => ({
-                                    ...prev,
-                                    standardLines: (prev.standardLines || []).map((l, i) =>
-                                      i === idx ? { ...l, quantity: nextQty } : l
-                                    )
-                                  }));
-                                }}
-                                aria-label="Aantal"
-                                className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
-                              />
-                            </div>
-                            <div className="sm:col-span-3">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={line.totalPrice ?? 0}
-                                onChange={(e) => {
-                                  const nextPrice = e.target.value;
-                                  setDefaultsDraft((prev) => ({
-                                    ...prev,
-                                    standardLines: (prev.standardLines || []).map((l, i) =>
-                                      i === idx ? { ...l, totalPrice: nextPrice } : l
-                                    )
-                                  }));
-                                }}
-                                aria-label="Totaalprijs (€)"
-                                className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
-                              />
-                            </div>
-                            <div className="flex sm:col-span-1 justify-end">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setDefaultsDraft((prev) => ({
-                                    ...prev,
-                                    standardLines: (prev.standardLines || []).filter(
-                                      (_, i) => i !== idx
-                                    )
-                                  }))
-                                }
-                                aria-label="Standaardregel verwijderen"
-                                title="Standaardregel verwijderen"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
-                              >
-                                <DeleteTrashIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 px-6 py-4 dark:border-slate-800">
-                  <button
-                    type="button"
-                    onClick={closeDefaultsModalWithoutSave}
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                  >
-                    Annuleren
-                  </button>
-                  <button
-                    type="submit"
-                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
-                  >
-                    Opslaan
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* Pop-up: Factuur aanmaken / bewerken met factuurregels, betaallink en bardienststatus */}
+          {/* Pop-up: Factuur aanmaken / bewerken met factuurregels en bardienststatus */}
           {editingInvoice && (
             <div
               onClick={closeInvoiceModalWithoutSave}
@@ -4255,38 +3816,6 @@
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Afzender
-                      </label>
-                      <input
-                        type="text"
-                        value={editingInvoice.senderName || ""}
-                        onChange={(e) =>
-                          setEditingInvoice({ ...editingInvoice, senderName: e.target.value })
-                        }
-                        placeholder="Bijv. Verburch"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Betaalgegevens / IBAN
-                      </label>
-                      <input
-                        type="text"
-                        value={editingInvoice.paymentInfo || ""}
-                        onChange={(e) =>
-                          setEditingInvoice({ ...editingInvoice, paymentInfo: e.target.value })
-                        }
-                        placeholder="IBAN of betaalinstructie"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
                         Factuurdatum
                       </label>
                       <input
@@ -4312,21 +3841,6 @@
                             dueDate: e.target.value || null
                           })
                         }
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Betaallink (optioneel)
-                      </label>
-                      <input
-                        type="url"
-                        value={editingInvoice.paymentLink || ""}
-                        onChange={(e) =>
-                          setEditingInvoice({ ...editingInvoice, paymentLink: e.target.value })
-                        }
-                        placeholder="https://..."
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                       />
                     </div>
@@ -4377,51 +3891,26 @@
 
                   {/* Factuurregels */}
                   <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/50">
-                    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <div className="mb-2.5 flex items-center justify-between gap-2">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                         Factuurregels
                       </span>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {(invoiceDefaults.standardLines || []).length > 0 && (
-                          <>
-                            <select
-                              value={selectedPresetLineIdx}
-                              onChange={(e) => setSelectedPresetLineIdx(e.target.value)}
-                              aria-label="Kies standaardregel"
-                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                            >
-                              {(invoiceDefaults.standardLines || []).map((preset, idx) => (
-                                <option key={preset.id || idx} value={String(idx)}>
-                                  {preset.subject || "Standaardregel"} ({formatEuro(preset.totalPrice)})
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={handleInsertPresetLineIntoInvoice}
-                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                            >
-                              + Standaardregel
-                            </button>
-                          </>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEditingInvoice((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    lines: [...(prev.lines || []), createEmptyInvoiceLine()]
-                                  }
-                                : null
-                            )
-                          }
-                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          + Regel toevoegen
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditingInvoice((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  lines: [...(prev.lines || []), createEmptyInvoiceLine()]
+                                }
+                              : null
+                          )
+                        }
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        + Regel toevoegen
+                      </button>
                     </div>
 
                     <div className="space-y-2.5">
@@ -4984,4 +4473,221 @@
                                   }
                                 })
                               }
-                              className="w-full rounded-
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              Eenheid
+                            </label>
+                            <select
+                              value={editingTask.recurrence?.unit || "days"}
+                              onChange={(e) =>
+                                setEditingTask({
+                                  ...editingTask,
+                                  recurrence: {
+                                    ...editingTask.recurrence,
+                                    unit: e.target.value
+                                  }
+                                })
+                              }
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                            >
+                              <option value="days">Dagen</option>
+                              <option value="weeks">Weken</option>
+                              <option value="months">Maanden</option>
+                            </select>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="hidden sm:block" />
+                      )}
+
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                          Nieuwe datum berekenen
+                        </label>
+                        <select
+                          value={editingTask.recurrence?.mode || "from_completion"}
+                          onChange={(e) =>
+                            setEditingTask({
+                              ...editingTask,
+                              recurrence: {
+                                ...editingTask.recurrence,
+                                mode: e.target.value
+                              }
+                            })
+                          }
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        >
+                          <option value="from_completion">Vanaf afronddatum</option>
+                          <option value="from_due">Vaste cadans vanaf geplande datum</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-950/60">
+                    <div>
+                      <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        Daily
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Toon deze taak in het Daily-overzicht voor je dagelijkse update
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingTask.daily)}
+                      onChange={(e) =>
+                        setEditingTask({ ...editingTask, daily: e.target.checked })
+                      }
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Notities
+                      </label>
+                      <span className="text-[11px] text-slate-400">
+                        Ctrl/Cmd+Enter om op te slaan
+                      </span>
+                    </div>
+                    <DirectMarkdownEditor
+                      value={editingTask.notes || ""}
+                      onChange={(nextNotes) =>
+                        setEditingTask((prev) => (prev ? { ...prev, notes: nextNotes } : null))
+                      }
+                      onSaveShortcut={() => editFormRef.current?.requestSubmit()}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 px-6 py-4 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={closeEditModalWithoutSave}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="submit"
+                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
+                  >
+                    Opslaan
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Pop-up: Nieuwe feedback invoeren (ook bereikbaar via Ctrl+Shift+F / Cmd+Shift+F) */}
+          {feedbackModalOpen && (
+            <div
+              onClick={closeFeedbackModalWithoutSave}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+            >
+              <form
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={handleSubmitFeedbackModal}
+                className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-bold">Feedback geven</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Sneltoets: Ctrl+Shift+F (of Cmd+Shift+F) • Noteer een verbeterpunt of wens
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeFeedbackModalWithoutSave}
+                    className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="mt-4">
+                  <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Jouw feedback of idee voor FocusFlow
+                  </label>
+                  <textarea
+                    ref={feedbackInputRef}
+                    rows="5"
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                        e.preventDefault();
+                        handleSubmitFeedbackModal(e);
+                      }
+                    }}
+                    placeholder="Beschrijf wat je wilt verbeteren of toevoegen..."
+                    className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm outline-none ${accent.focusRing} dark:border-slate-700 dark:bg-slate-950`}
+                    required
+                  />
+                </div>
+
+                <div className="mt-5 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeFeedbackModalWithoutSave}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="submit"
+                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${accent.primaryBtn}`}
+                  >
+                    Feedback opslaan
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {toast && (
+            <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-medium text-white shadow-lg dark:bg-slate-100 dark:text-slate-900">
+              <span>{toast.message}</span>
+              {toast.canUndo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleUndo();
+                    setToast(null);
+                  }}
+                  className="underline font-bold"
+                >
+                  Ongedaan maak
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function mountFocusFlowApp() {
+      const rootElement = document.getElementById("root");
+      if (!rootElement) return;
+      rootElement.replaceChildren();
+      const appMountNode = document.createElement("div");
+      appMountNode.setAttribute("data-focusflow-mount", "true");
+      rootElement.appendChild(appMountNode);
+      const root = ReactDOM.createRoot(appMountNode);
+      root.render(<App />);
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", mountFocusFlowApp, { once: true });
+    } else {
+      mountFocusFlowApp();
+    }
+  </script>
+</body>
+</html>
